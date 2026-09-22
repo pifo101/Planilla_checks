@@ -1,0 +1,71 @@
+<%- include('../partials/head') %>
+<%- include('../partials/navbar') %>
+<div class="app-body">
+  <%- include('../partials/sidebar') %>
+  <main class="app-main">
+    <div class="mb-4">
+      <div class="page-eyebrow">Asistente de agencia</div>
+      <h1 class="h3 mb-1">Nueva planilla</h1>
+      <p class="text-muted mb-0">Consulta y agrega solicitudes antes de enviar la planilla.</p>
+    </div>
+
+    <form data-solicitud-form>
+      <section class="card mb-4">
+        <div class="card-body p-4">
+          <label class="form-label fw-semibold" for="numeroSolicitud">Numero de solicitud</label>
+          <div class="row g-2">
+            <div class="col-md-8 col-lg-6">
+              <input class="form-control" id="numeroSolicitud" name="numeroSolicitud" placeholder="Ej. 100245" type="text">
+            </div>
+            <div class="col-auto">
+              <button class="btn btn-primary" type="button" data-load-demo><i class="bi bi-search me-2"></i>Obtener datos</button>
+            </div>
+          </div>
+          <div class="form-text">El boton carga datos mock. La consulta al Web Service aun no esta conectada.</div>
+        </div>
+      </section>
+
+      <section class="card mb-4">
+        <div class="card-header bg-white p-4 pb-0 border-0 d-flex justify-content-between align-items-center">
+          <h2 class="h5 mb-0">Informacion de la solicitud</h2>
+          <span class="badge text-bg-light">Demostracion</span>
+        </div>
+        <div class="card-body p-4">
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label" for="cliente">Cliente</label><input class="form-control readonly-field" id="cliente" name="cliente" readonly></div>
+            <div class="col-md-3"><label class="form-label" for="montoAprobado">Monto aprobado</label><input class="form-control readonly-field" id="montoAprobado" name="montoAprobado" readonly></div>
+            <div class="col-md-3"><label class="form-label" for="montoCancelado">Monto cancelado</label><input class="form-control readonly-field" id="montoCancelado" name="montoCancelado" readonly></div>
+            <div class="col-md-3"><label class="form-label" for="descuentos">Descuentos</label><input class="form-control readonly-field" id="descuentos" name="descuentos" readonly></div>
+            <div class="col-md-3"><label class="form-label" for="montoCheque">Monto cheque</label><input class="form-control readonly-field" id="montoCheque" name="montoCheque" readonly></div>
+            <div class="col-md-3"><label class="form-label" for="fechaHora">Fecha y hora</label><input class="form-control readonly-field" id="fechaHora" name="fechaHora" readonly></div>
+            <div class="col-md-3"><label class="form-label" for="metodologia">Metodologia</label><input class="form-control readonly-field" id="metodologia" name="metodologia" readonly></div>
+            <div class="col-md-6"><label class="form-label" for="agencia">Agencia</label><input class="form-control readonly-field" id="agencia" name="agencia" readonly></div>
+            <div class="col-md-6"><label class="form-label fw-semibold" for="numeroCheque">Numero de cheque</label><input class="form-control" id="numeroCheque" name="numeroCheque" type="text" placeholder="Ingresa el numero de cheque"></div>
+          </div>
+          <div class="d-flex flex-wrap gap-2 mt-4">
+            <button class="btn btn-primary" type="button" disabled><i class="bi bi-plus-circle me-2"></i>Agregar a planilla</button>
+            <button class="btn btn-outline-secondary" type="button" data-clear-form>Limpiar</button>
+          </div>
+        </div>
+      </section>
+    </form>
+
+    <section class="card">
+      <div class="card-header bg-white p-4 border-0 d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <h2 class="h5 mb-0">Solicitudes agregadas</h2>
+        <span class="badge text-bg-light">1 registro de demostracion</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead><tr><th>Solicitud</th><th>Cliente</th><th>Aprobado</th><th>Cancelado</th><th>Descuentos</th><th>Monto cheque</th><th>Numero cheque</th><th>Metodologia</th><th>Fecha</th><th>Acciones</th></tr></thead>
+          <tbody><tr><td>100241</td><td>Cliente demo</td><td>Q 12,500.00</td><td>Q 1,000.00</td><td>Q 750.00</td><td>Q 10,750.00</td><td>CHK-001</td><td>Demo</td><td>22/09/2026</td><td><button class="btn btn-sm btn-outline-danger" type="button" disabled><i class="bi bi-trash"></i></button></td></tr></tbody>
+          <tfoot class="table-light fw-semibold"><tr><td colspan="2">Totales</td><td>Q 12,500.00</td><td>Q 1,000.00</td><td>Q 750.00</td><td>Q 10,750.00</td><td colspan="4"></td></tr></tfoot>
+        </table>
+      </div>
+      <div class="card-body p-4 text-end">
+        <button class="btn btn-success" type="button" disabled><i class="bi bi-send-check me-2"></i>Enviar planilla</button>
+      </div>
+    </section>
+  </main>
+</div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,9 @@
+<%- include('partials/head') %>
+<%- include('partials/navbar') %>
+<div class="app-body">
+  <%- include('partials/sidebar') %>
+  <main class="app-main d-flex align-items-center justify-content-center text-center">
+    <div><div class="display-1 fw-bold text-danger"><%= pageTitle === 'Acceso denegado' ? '403' : '500' %></div><h1 class="h3"><%= pageTitle %></h1><p class="text-muted"><%= errorMessage || 'Ocurrio un error inesperado. Intenta nuevamente.' %></p><a class="btn btn-primary" href="/dashboard">Volver al dashboard</a></div>
+  </main>
+</div>
+<%- include('partials/footer') %>

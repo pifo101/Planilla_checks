@@ -1,0 +1,25 @@
+<aside class="app-sidebar">
+  <nav aria-label="Navegacion principal">
+    <a class="sidebar-link <%= currentPath === '/dashboard' ? 'active' : '' %>" href="/dashboard">
+      <i class="bi bi-grid-1x2"></i><span>Dashboard</span>
+    </a>
+
+    <div class="sidebar-label">ASISTENTE</div>
+    <a class="sidebar-link <%= currentPath === '/asistente/nueva-planilla' ? 'active' : '' %>" href="/asistente/nueva-planilla">
+      <i class="bi bi-file-earmark-plus"></i><span>Nueva planilla</span>
+    </a>
+    <a class="sidebar-link <%= currentPath.startsWith('/asistente/planillas') ? 'active' : '' %>" href="/asistente/planillas">
+      <i class="bi bi-send"></i><span>Planillas enviadas</span>
+    </a>
+
+    <div class="sidebar-label">CONTABILIDAD</div>
+    <a class="sidebar-link <%= currentPath.startsWith('/contabilidad/planillas') ? 'active' : '' %>" href="/contabilidad/planillas">
+      <i class="bi bi-inbox"></i><span>Planillas recibidas</span>
+    </a>
+
+    <div class="sidebar-label">ADMINISTRACION</div>
+    <a class="sidebar-link <%= currentPath === '/admin/usuarios' ? 'active' : '' %>" href="/admin/usuarios">
+      <i class="bi bi-people"></i><span>Usuarios</span>
+    </a>
+  </nav>
+</aside>

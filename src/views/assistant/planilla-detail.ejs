@@ -1,0 +1,11 @@
+<%- include('../partials/head') %>
+<%- include('../partials/navbar') %>
+<div class="app-body">
+  <%- include('../partials/sidebar') %>
+  <main class="app-main">
+    <a class="btn btn-sm btn-outline-secondary mb-3" href="/asistente/planillas"><i class="bi bi-arrow-left me-1"></i>Volver</a>
+    <div class="mb-4"><div class="page-eyebrow">Detalle de demostracion</div><h1 class="h3 mb-1">Planilla <%= planilla.id %></h1><p class="text-muted mb-0"><%= planilla.agency %> · <%= planilla.date %></p></div>
+    <section class="card"><div class="card-body p-4"><div class="row g-4"><div class="col-sm-4"><div class="text-muted small">Solicitudes</div><div class="h4"><%= planilla.requests %></div></div><div class="col-sm-4"><div class="text-muted small">Total aprobado</div><div class="h4"><%= currency.format(planilla.approved) %></div></div><div class="col-sm-4"><div class="text-muted small">Estado</div><div><span class="badge text-bg-primary"><%= planilla.status %></span></div></div></div><hr><p class="text-muted mb-0">El detalle de solicitudes se conectara a la persistencia en una etapa posterior.</p></div></section>
+  </main>
+</div>
+<%- include('../partials/footer') %>
