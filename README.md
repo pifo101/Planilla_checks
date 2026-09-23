@@ -36,6 +36,8 @@ DB_DRIVER=ODBC Driver 18 for SQL Server
 DB_ENCRYPT=false
 DB_TRUST_SERVER_CERTIFICATE=true
 DB_POOL_MAX=10
+WEBSERVICE_BASE_URL=http://adicla-app.iso.com.gt:7001/ServicioSolicitudesREST/ServicioSolicitudes.svc
+WEBSERVICE_TIMEOUT_MS=8000
 ```
 
 No se necesitan `DB_USER` ni `DB_PASSWORD`: la conexion utiliza la identidad de Windows del proceso.
@@ -92,6 +94,6 @@ npm test
 
 El login provisional fue reemplazado por consulta a SQL Server y `bcrypt.compare`. La sesion solo guarda `id`, `nombre`, `email`, `rol`, `agenciaId` y el nombre de agencia para presentacion; nunca guarda contrasenas ni hashes.
 
-El Web Service externo sigue aislado como placeholder en `src/services/webservice.service.js`. Los mocks de planillas y usuarios permanecen temporalmente para evitar reemplazos inseguros de interfaz.
+La pantalla Nueva planilla consulta la distribucion mediante `GET /api/solicitudes/:numeroSolicitud/distribucion`. Express llama al Web Service externo, valida la respuesta y la normaliza antes de devolverla al navegador. Obtener datos no inserta registros SQL; los mocks de las otras pantallas permanecen temporalmente.
 
-El modelo, relaciones, indices y decision temporal sobre actas se describen en [`docs/database.md`](docs/database.md). Las reglas funcionales estan en [`docs/business-rules.md`](docs/business-rules.md).
+El contrato, campos, calculos conocidos, errores y reglas pendientes del Web Service estan en [`docs/webservice.md`](docs/webservice.md). El modelo SQL se describe en [`docs/database.md`](docs/database.md) y las reglas funcionales en [`docs/business-rules.md`](docs/business-rules.md).

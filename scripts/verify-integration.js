@@ -13,6 +13,7 @@ const suffix = `${Date.now()}${crypto.randomInt(1000, 9999)}`;
 const agencyCode = `TEST-${suffix}`.slice(0, 30);
 const activeEmail = `active-${suffix}@example.test`;
 const inactiveEmail = `inactive-${suffix}@example.test`;
+const accountingEmail = `accounting-${suffix}@example.test`;
 const password = crypto.randomBytes(18).toString('base64url');
 let server;
 
@@ -44,6 +45,7 @@ async function cleanup() {
     .input('agencyCode', sql.NVarChar(30), agencyCode)
     .input('activeEmail', sql.NVarChar(254), activeEmail)
     .input('inactiveEmail', sql.NVarChar(254), inactiveEmail)
+    .input('accountingEmail', sql.NVarChar(254), accountingEmail)
     .query(`
       DELETE s
       FROM dbo.solicitudes_planilla AS s
@@ -56,7 +58,7 @@ async function cleanup() {
       INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
       WHERE a.codigo = @agencyCode;
 
-      DELETE FROM dbo.usuarios WHERE email IN (@activeEmail, @inactiveEmail);
+      DELETE FROM dbo.usuarios WHERE email IN (@activeEmail, @inactiveEmail, @accountingEmail);
       DELETE FROM dbo.agencias WHERE codigo = @agencyCode;
     `);
 }
@@ -90,6 +92,12 @@ async function main() {
     passwordHash,
     rol: 'CONTABILIDAD',
     activo: false,
+  });
+  await userRepository.create({
+    nombre: 'Contabilidad temporal',
+    email: accountingEmail,
+    passwordHash,
+    rol: 'CONTABILIDAD',
   });
 
   assert.equal((await userRepository.findByEmail(activeEmail)).id, activeUser.id);
@@ -179,6 +187,8 @@ async function main() {
   const withoutSession = await fetch(`${baseUrl}/dashboard`, { redirect: 'manual' });
   assert.equal(withoutSession.status, 302);
   assert.equal(withoutSession.headers.get('location'), '/login');
+  const apiWithoutSession = await fetch(`${baseUrl}/api/solicitudes/123/distribucion`);
+  assert.equal(apiWithoutSession.status, 401);
 
   assert.equal((await login(baseUrl, activeEmail, `${password}-incorrecta`)).status, 401);
   assert.equal((await login(baseUrl, inactiveEmail, password)).status, 401);
@@ -192,6 +202,20 @@ async function main() {
   assert.equal(wrongRole.status, 403);
   const correctRole = await fetch(`${baseUrl}/asistente/planillas`, { headers: { cookie } });
   assert.equal(correctRole.status, 200);
+  const newPlanillaPage = await fetch(`${baseUrl}/asistente/nueva-planilla`, { headers: { cookie } });
+  assert.equal(newPlanillaPage.status, 200);
+  assert.match(await newPlanillaPage.text(), /data-fetch-distribution/);
+  const invalidRequest = await fetch(`${baseUrl}/api/solicitudes/invalida/distribucion`, {
+    headers: { cookie },
+  });
+  assert.equal(invalidRequest.status, 400);
+
+  const accountingLogin = await login(baseUrl, accountingEmail, password);
+  const accountingCookie = accountingLogin.headers.get('set-cookie').split(';', 1)[0];
+  const forbiddenApi = await fetch(`${baseUrl}/api/solicitudes/123/distribucion`, {
+    headers: { cookie: accountingCookie },
+  });
+  assert.equal(forbiddenApi.status, 403);
 
   console.log('Verificacion integral completada correctamente.');
 }

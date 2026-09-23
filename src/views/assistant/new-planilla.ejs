@@ -15,20 +15,21 @@
           <label class="form-label fw-semibold" for="numeroSolicitud">Numero de solicitud</label>
           <div class="row g-2">
             <div class="col-md-8 col-lg-6">
-              <input class="form-control" id="numeroSolicitud" name="numeroSolicitud" placeholder="Ej. 100245" type="text">
+              <input class="form-control" id="numeroSolicitud" name="numeroSolicitud" placeholder="Ej. 100245" type="text" inputmode="numeric" pattern="[0-9]{1,30}" maxlength="30">
             </div>
             <div class="col-auto">
-              <button class="btn btn-primary" type="button" data-load-demo><i class="bi bi-search me-2"></i>Obtener datos</button>
+              <button class="btn btn-primary" type="button" data-fetch-distribution><i class="bi bi-search me-2"></i>Obtener datos</button>
             </div>
           </div>
-          <div class="form-text">El boton carga datos mock. La consulta al Web Service aun no esta conectada.</div>
+          <div class="form-text">La consulta obtiene la distribucion; no agrega ni guarda la solicitud.</div>
+          <div class="alert d-none mt-3 mb-0" role="alert" data-request-feedback></div>
         </div>
       </section>
 
       <section class="card mb-4">
         <div class="card-header bg-white p-4 pb-0 border-0 d-flex justify-content-between align-items-center">
           <h2 class="h5 mb-0">Informacion de la solicitud</h2>
-          <span class="badge text-bg-light">Demostracion</span>
+          <span class="badge text-bg-light">Web Service</span>
         </div>
         <div class="card-body p-4">
           <div class="row g-3">
