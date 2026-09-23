@@ -4,6 +4,7 @@ const path = require('path');
 const express = require('express');
 const session = require('express-session');
 const config = require('./config');
+const { closePool } = require('./config/database');
 const indexRoutes = require('./routes/index.routes');
 const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');
@@ -67,9 +68,19 @@ app.use((error, req, res, next) => {
 });
 
 if (require.main === module) {
-  app.listen(config.port, () => {
+  const server = app.listen(config.port, () => {
     console.log(`Planilla Checks disponible en http://localhost:${config.port}`);
   });
+
+  async function shutdown() {
+    server.close(async () => {
+      await closePool();
+      process.exit(0);
+    });
+  }
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 module.exports = app;

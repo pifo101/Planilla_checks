@@ -5,7 +5,9 @@
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
-    "dev": "nodemon src/app.js"
+    "dev": "nodemon src/app.js",
+    "create-admin": "node scripts/create-admin.js",
+    "test": "node scripts/verify-integration.js"
   },
   "engines": {
     "node": ">=18"
@@ -15,7 +17,9 @@
     "dotenv": "^17.2.2",
     "ejs": "^3.1.10",
     "express": "^5.1.0",
-    "express-session": "^1.18.2"
+    "express-session": "^1.18.2",
+    "msnodesqlv8": "^5.5.0",
+    "mssql": "^12.7.2"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

@@ -12,11 +12,11 @@
     <div class="dropdown">
       <button class="btn btn-light dropdown-toggle d-flex align-items-center gap-2" data-bs-toggle="dropdown" type="button">
         <i class="bi bi-person-circle"></i>
-        <span class="d-none d-sm-inline"><%= currentUser ? currentUser.name : 'Modo demostracion' %></span>
+        <span class="d-none d-sm-inline"><%= currentUser ? currentUser.nombre : 'Sin sesion' %></span>
       </button>
       <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
         <% if (currentUser) { %>
-          <li><span class="dropdown-item-text small text-muted"><%= currentUser.role %> · <%= currentUser.agency %></span></li>
+          <li><span class="dropdown-item-text small text-muted"><%= currentUser.rol %> · <%= currentUser.agenciaNombre || 'Sin agencia' %></span></li>
           <li><hr class="dropdown-divider"></li>
           <li>
             <form action="/logout" method="post">

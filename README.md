@@ -4,62 +4,94 @@ Aplicacion web para administrar planillas de creditos y cheques entre asistentes
 
 ## Tecnologias
 
-- Node.js y Express
-- EJS
-- Bootstrap 5
-- `express-session`
-- `dotenv`
-- `bcrypt` (preparado para la autenticacion real)
-- Nodemon para desarrollo
+- Node.js 18+, Express 5, CommonJS y EJS.
+- SQL Server Express con SQL explicito mediante `mssql` y `msnodesqlv8`.
+- Autenticacion con `bcrypt` y sesiones con `express-session`.
+- Bootstrap 5 y Nodemon.
 
 ## Requisitos
 
-- Node.js 18 o superior
-- npm
+- Node.js 18 o superior y npm.
+- SQL Server Express.
+- ODBC Driver 18 for SQL Server.
+- `sqlcmd` para ejecutar los scripts documentados.
+
+La configuracion comprobada durante el desarrollo usa `localhost\SQLEXPRESS` con autenticacion integrada de Windows. La cuenta de Windows que ejecuta Node debe tener acceso a `PlanillaChecksDB`.
 
 ## Instalacion
 
-```bash
+```powershell
 npm install
+Copy-Item .env.example .env
 ```
 
-Copiar `.env.example` como `.env` y cambiar `SESSION_SECRET` para cada ambiente. No se requieren variables de base de datos ni Web Service durante esta etapa.
+Configurar `.env` sin incluirlo en Git:
 
-```bash
-npm run dev
+```dotenv
+PORT=3000
+SESSION_SECRET=replace_with_a_long_random_secret
+DB_SERVER=localhost\SQLEXPRESS
+DB_DATABASE=PlanillaChecksDB
+DB_DRIVER=ODBC Driver 18 for SQL Server
+DB_ENCRYPT=false
+DB_TRUST_SERVER_CERTIFICATE=true
+DB_POOL_MAX=10
 ```
 
-La aplicacion queda disponible en `http://localhost:3000`. Para ejecucion sin recarga automatica se puede usar `npm start`.
+No se necesitan `DB_USER` ni `DB_PASSWORD`: la conexion utiliza la identidad de Windows del proceso.
 
-## Estructura general
+## Crear la base
 
-- `src/config`: configuracion basada en variables de entorno.
-- `src/controllers`: logica HTTP y datos mock temporales.
-- `src/middleware`: autenticacion y autorizacion por roles, preparadas para activarse posteriormente.
-- `src/routes`: definicion de endpoints por modulo.
-- `src/services`: integraciones externas aisladas.
-- `src/utils`: reglas de calculo reutilizables.
-- `src/views`: vistas EJS y parciales del dashboard.
-- `public`: CSS, JavaScript e imagenes publicas.
-- `database`, `docs` y `tests`: espacios reservados para las siguientes etapas.
+Los scripts son incrementales y pueden volver a ejecutarse de forma segura sobre el esquema que crean. No eliminan bases ni datos existentes.
 
-## Roles previstos
+```powershell
+sqlcmd -S ".\SQLEXPRESS" -E -C -i "database\001_create_database.sql" -b
+sqlcmd -S ".\SQLEXPRESS" -E -C -i "database\002_create_tables.sql" -b
+sqlcmd -S ".\SQLEXPRESS" -E -C -i "database\003_create_indexes.sql" -b
+```
 
-- `ADMIN`: administra usuarios, roles, agencias y estados.
-- `ASISTENTE`: crea planillas y consulta su historial.
-- `CONTABILIDAD`: recibe, consulta y posteriormente procesa planillas.
+No se incluyen agencias de demostracion. Las agencias institucionales deben cargarse con sus codigos y nombres reales antes de crear asistentes.
 
-## Estado actual
+## Crear el primer administrador
 
-Esta version implementa la navegacion, vistas responsive y rutas base. El dashboard, usuarios, solicitudes y planillas muestran datos de demostracion identificados en la interfaz. El login es provisional: crea una sesion de demostracion y no valida credenciales.
+Definir las variables solo en el entorno del proceso y ejecutar el script. La contrasena debe tener al menos 12 caracteres y nunca se guarda en Git.
 
-Todavia no se implementan:
+```powershell
+$env:ADMIN_NAME="Nombre del administrador"
+$env:ADMIN_EMAIL="admin@institucion.example"
+$env:ADMIN_PASSWORD="una-contrasena-segura"
+npm run create-admin
+Remove-Item Env:ADMIN_PASSWORD
+```
 
-- Conexion a SQL o persistencia.
-- Autenticacion real y comparacion de contrasenas con bcrypt.
-- Consumo del Web Service externo.
-- CRUD de usuarios.
-- Envio y procesamiento real de planillas.
-- Restriccion efectiva de rutas por rol.
+El script genera un hash bcrypt con 12 rounds. Los roles `ADMIN` y `CONTABILIDAD` pueden no tener agencia; `ASISTENTE` siempre requiere una agencia valida.
 
-Las reglas de negocio previstas estan documentadas en [`docs/business-rules.md`](docs/business-rules.md).
+## Iniciar y probar
+
+```powershell
+npm start
+```
+
+La aplicacion queda en `http://localhost:3000`. Para recarga automatica usar `npm run dev`.
+
+La verificacion integral requiere la base configurada en `.env`. Crea datos temporales, prueba repositorios, bcrypt, login, usuario inactivo, permisos y restricciones UNIQUE, y elimina los datos al finalizar:
+
+```powershell
+npm test
+```
+
+## Arquitectura de persistencia
+
+- `database`: scripts SQL versionados.
+- `src/config/database.js`: configuracion y pool compartido de SQL Server.
+- `src/repositories`: consultas parametrizadas y transacciones.
+- `src/services`: autenticacion y reglas de negocio independientes de HTTP.
+- `src/controllers`: adaptacion entre solicitudes HTTP y servicios.
+- `src/middleware`: autenticacion y autorizacion backend por rol.
+- `scripts/create-admin.js`: alta segura del primer administrador.
+
+El login provisional fue reemplazado por consulta a SQL Server y `bcrypt.compare`. La sesion solo guarda `id`, `nombre`, `email`, `rol`, `agenciaId` y el nombre de agencia para presentacion; nunca guarda contrasenas ni hashes.
+
+El Web Service externo sigue aislado como placeholder en `src/services/webservice.service.js`. Los mocks de planillas y usuarios permanecen temporalmente para evitar reemplazos inseguros de interfaz.
+
+El modelo, relaciones, indices y decision temporal sobre actas se describen en [`docs/database.md`](docs/database.md). Las reglas funcionales estan en [`docs/business-rules.md`](docs/business-rules.md).

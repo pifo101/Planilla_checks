@@ -10,18 +10,14 @@
         </div>
       </div>
 
-      <div class="alert alert-info py-2 small" role="alert">
-        Acceso provisional: cualquier usuario y contrasena no vacios permiten entrar al entorno de demostracion.
-      </div>
-
       <% if (typeof error !== 'undefined') { %>
         <div class="alert alert-danger py-2"><%= error %></div>
       <% } %>
 
       <form action="/login" method="post">
         <div class="mb-3">
-          <label class="form-label" for="username">Usuario o correo</label>
-          <input class="form-control form-control-lg" id="username" name="username" type="text" value="<%= typeof username !== 'undefined' ? username : '' %>" autocomplete="username" required autofocus>
+          <label class="form-label" for="email">Correo</label>
+          <input class="form-control form-control-lg" id="email" name="email" type="email" value="<%= typeof email !== 'undefined' ? email : '' %>" autocomplete="username" required autofocus>
         </div>
         <div class="mb-4">
           <label class="form-label" for="password">Contrasena</label>
