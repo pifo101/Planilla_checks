@@ -1,6 +1,10 @@
 # Reglas de negocio pendientes
 
-Estas reglas deberan aplicarse cuando se implementen la persistencia, la autenticacion y el Web Service:
+La consulta actual obtiene datos del Web Service. `Obtener datos` no guarda la solicitud. La asistente puede agregar solicitudes a un borrador temporal mantenido en memoria por el navegador; `Agregar a planilla` tampoco inserta ni envia datos. Al recargar la pagina, este borrador se pierde.
+
+Antes de agregar, Planilla Checks consulta SQL Server para comprobar que el numero de solicitud y el numero de cheque no se hayan utilizado. Tambien evita duplicados dentro del borrador. El historial permanecera en SQL Server cuando se implemente el envio definitivo, que sigue pendiente para la siguiente fase.
+
+Reglas del flujo:
 
 1. El numero de solicitud no puede repetirse despues de haber sido enviado en una planilla.
 2. El numero de cheque debe ser unico y nunca reutilizarse.
@@ -15,6 +19,8 @@ Estas reglas deberan aplicarse cuando se implementen la persistencia, la autenti
 8. Una vez enviada, la planilla debe conservarse historicamente.
 9. Contabilidad puede recibir planillas de distintas agencias.
 10. Los creditos procesados deben quedar bloqueados para evitar modificaciones accidentales.
+11. Los totales del borrador se calculan en centavos enteros y se actualizan al agregar o eliminar solicitudes.
+12. `Limpiar` elimina solamente la consulta activa y conserva las solicitudes agregadas al borrador.
 
 ## Pendientes de confirmacion del ingeniero
 

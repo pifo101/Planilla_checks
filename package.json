@@ -8,7 +8,7 @@
     "dev": "nodemon src/app.js",
     "create-admin": "node scripts/create-admin.js",
     "test": "npm run test:webservice && npm run test:integration",
-    "test:webservice": "node --test tests/disbursement.test.js tests/webservice.test.js",
+    "test:webservice": "node --test tests/availability.test.js tests/disbursement.test.js tests/webservice.test.js",
     "test:integration": "node scripts/verify-integration.js"
   },
   "engines": {

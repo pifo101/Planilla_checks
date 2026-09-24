@@ -8,6 +8,7 @@ const { sql, getPool, closePool } = require('../src/config/database');
 const userRepository = require('../src/repositories/user.repository');
 const authService = require('../src/services/auth.service');
 const planillaService = require('../src/services/planilla.service');
+const planillaRepository = require('../src/repositories/planilla.repository');
 
 const suffix = `${Date.now()}${crypto.randomInt(1000, 9999)}`;
 const agencyCode = `TEST-${suffix}`.slice(0, 30);
@@ -115,7 +116,7 @@ async function main() {
     .query('UPDATE dbo.agencias SET activo = 1 WHERE id = @agenciaId;');
 
   const solicitud = {
-    numeroSolicitud: `SOL-${suffix}`,
+    numeroSolicitud: suffix,
     nombreCliente: 'Cliente temporal',
     montoAprobado: 1500,
     montoCancelado: 100,
@@ -189,6 +190,8 @@ async function main() {
   assert.equal(withoutSession.headers.get('location'), '/login');
   const apiWithoutSession = await fetch(`${baseUrl}/api/solicitudes/123/distribucion`);
   assert.equal(apiWithoutSession.status, 401);
+  const availabilityWithoutSession = await fetch(`${baseUrl}/api/solicitudes/123/disponibilidad?numeroCheque=5001`);
+  assert.equal(availabilityWithoutSession.status, 401);
 
   assert.equal((await login(baseUrl, activeEmail, `${password}-incorrecta`)).status, 401);
   assert.equal((await login(baseUrl, inactiveEmail, password)).status, 401);
@@ -209,6 +212,34 @@ async function main() {
     headers: { cookie },
   });
   assert.equal(invalidRequest.status, 400);
+  const invalidAvailabilityRequest = await fetch(`${baseUrl}/api/solicitudes/invalida/disponibilidad?numeroCheque=5001`, {
+    headers: { cookie },
+  });
+  assert.equal(invalidAvailabilityRequest.status, 400);
+  const invalidCheck = await fetch(`${baseUrl}/api/solicitudes/123/disponibilidad?numeroCheque=`, {
+    headers: { cookie },
+  });
+  assert.equal(invalidCheck.status, 400);
+
+  const usedAvailability = await fetch(`${baseUrl}/api/solicitudes/${solicitud.numeroSolicitud}/disponibilidad?numeroCheque=${solicitud.numeroCheque}`, {
+    headers: { cookie },
+  });
+  assert.equal(usedAvailability.status, 200);
+  const usedAvailabilityData = await usedAvailability.json();
+  assert.equal(usedAvailabilityData.data.solicitudDisponible, false);
+  assert.equal(usedAvailabilityData.data.chequeDisponible, false);
+
+  const freeAvailability = await fetch(`${baseUrl}/api/solicitudes/9${suffix}/disponibilidad?numeroCheque=FREE-${suffix}`, {
+    headers: { cookie },
+  });
+  assert.equal(freeAvailability.status, 200);
+  const freeAvailabilityData = await freeAvailability.json();
+  assert.equal(freeAvailabilityData.data.solicitudDisponible, true);
+  assert.equal(freeAvailabilityData.data.chequeDisponible, true);
+
+  const injectionText = `${solicitud.numeroSolicitud}' OR 1=1--`;
+  const parameterizedResult = await planillaRepository.findSolicitudUsage(injectionText, injectionText);
+  assert.deepEqual(parameterizedResult, { solicitudUtilizada: false, chequeUtilizado: false });
 
   const accountingLogin = await login(baseUrl, accountingEmail, password);
   const accountingCookie = accountingLogin.headers.get('set-cookie').split(';', 1)[0];
@@ -216,6 +247,10 @@ async function main() {
     headers: { cookie: accountingCookie },
   });
   assert.equal(forbiddenApi.status, 403);
+  const forbiddenAvailability = await fetch(`${baseUrl}/api/solicitudes/123/disponibilidad?numeroCheque=5001`, {
+    headers: { cookie: accountingCookie },
+  });
+  assert.equal(forbiddenAvailability.status, 403);
 
   console.log('Verificacion integral completada correctamente.');
 }

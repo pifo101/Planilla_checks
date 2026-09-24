@@ -30,6 +30,15 @@ Respuesta interna estable
 
 El navegador nunca llama directamente al servidor externo. Consultar no crea planillas, solicitudes ni otros registros SQL.
 
+## Consulta, borrador e historial
+
+- `Obtener datos` consulta el Web Service y muestra una solicitud; no la guarda.
+- `Agregar a planilla` valida disponibilidad en SQL Server y agrega solo los campos necesarios a un borrador temporal en memoria del frontend; no envia ni inserta registros.
+- El borrador se pierde al recargar la pagina en esta fase.
+- `Enviar planilla` permanece deshabilitado. La persistencia del historial en SQL Server queda pendiente para la siguiente fase.
+
+La disponibilidad se consulta con `GET /api/solicitudes/:numeroSolicitud/disponibilidad?numeroCheque=...`. Este endpoint protegido solo ejecuta una consulta parametrizada sobre `solicitudes_planilla`.
+
 ## Campos utilizados
 
 - `FormaDesembolso = 1`: Emision de cheque.

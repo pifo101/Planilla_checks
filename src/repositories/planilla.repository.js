@@ -143,9 +143,35 @@ async function findDetail(id) {
   return { ...result.recordsets[0][0], solicitudes: result.recordsets[1] };
 }
 
+async function findSolicitudUsage(numeroSolicitud, numeroCheque) {
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('numeroSolicitud', sql.NVarChar(50), numeroSolicitud)
+    .input('numeroCheque', sql.NVarChar(50), numeroCheque)
+    .query(`
+      SELECT
+        CAST(CASE WHEN EXISTS (
+          SELECT 1
+          FROM dbo.solicitudes_planilla
+          WHERE numero_solicitud = @numeroSolicitud
+        ) THEN 1 ELSE 0 END AS BIT) AS solicitudUtilizada,
+        CAST(CASE WHEN EXISTS (
+          SELECT 1
+          FROM dbo.solicitudes_planilla
+          WHERE numero_cheque = @numeroCheque
+        ) THEN 1 ELSE 0 END AS BIT) AS chequeUtilizado;
+    `);
+
+  return {
+    solicitudUtilizada: Boolean(result.recordset[0].solicitudUtilizada),
+    chequeUtilizado: Boolean(result.recordset[0].chequeUtilizado),
+  };
+}
+
 module.exports = {
   createWithSolicitudes,
   findByDate,
   findByAgency,
   findDetail,
+  findSolicitudUsage,
 };
