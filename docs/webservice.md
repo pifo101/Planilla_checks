@@ -41,6 +41,8 @@ El navegador nunca llama directamente al servidor externo. Consultar no crea pla
 - `OrdenPago`: se conserva desde la emision de cheque y no es el numero de cheque.
 - `Ejecutado`: actualmente debe ser estrictamente `true`.
 
+Para el proceso actual de Planilla Checks, el campo de descuentos utilizado es Gasto01. Los campos Gasto02-Gasto10 no forman parte del cálculo requerido.
+
 No se utiliza `Monto`, porque los ejemplos reales lo devuelven en cero. `numeroCheque` sigue siendo un dato manual de Planilla Checks.
 
 ## Calculo conocido
@@ -64,7 +66,6 @@ Los importes se convierten a centavos enteros antes de sumarlos y se devuelven c
 - Timeout, error de red y estado HTTP no exitoso.
 - Operaciones con `Ejecutado !== true`.
 - Nombres de cliente diferentes.
-- Valores distintos de cero en `Gasto02` a `Gasto10`.
 - Solo abono a prestamo.
 - Formas de desembolso desconocidas.
 - Metodologia grupal sin regla financiera confirmada.
@@ -75,7 +76,6 @@ El endpoint institucional disponible actualmente usa HTTP sin cifrado. Planilla 
 
 ## Pendiente de confirmacion del ingeniero
 
-1. Si descuentos utiliza solo `Gasto01` o suma `Gasto01` a `Gasto10`.
-2. Como procesar una distribucion que tenga unicamente Abono a prestamo.
-3. Confirmacion definitiva de `Ejecutado === true` como estado final requerido.
-4. Como agregar montos cuando existen varias emisiones de cheque.
+1. Como procesar una distribucion que tenga unicamente Abono a prestamo.
+2. Confirmacion definitiva de `Ejecutado === true` como estado final requerido.
+3. Como agregar montos cuando existen varias emisiones de cheque.

@@ -7,8 +7,6 @@ class DisbursementError extends Error {
   }
 }
 
-const EXPENSE_FIELDS = Array.from({ length: 9 }, (_, index) => `Gasto${String(index + 2).padStart(2, '0')}`);
-
 function toCents(value, fieldName, { required = false } = {}) {
   if (value === undefined || value === null || value === '') {
     if (!required) return 0;
@@ -124,23 +122,6 @@ function normalizeDisbursement(distribuciones, { fechaExtraccion = new Date() } 
       result,
       'NON_FINAL_DISTRIBUTION',
       ['Se detectaron operaciones que no estan marcadas como ejecutadas.'],
-    );
-  }
-
-  const unconfirmedExpenses = [];
-  for (const item of distribuciones) {
-    for (const field of EXPENSE_FIELDS) {
-      if (toCents(item[field], field) !== 0) {
-        unconfirmedExpenses.push(field);
-      }
-    }
-  }
-
-  if (unconfirmedExpenses.length > 0) {
-    return unsupported(
-      result,
-      'UNCONFIRMED_EXPENSE_FIELDS',
-      [`Se recibieron valores en campos pendientes de confirmacion: ${[...new Set(unconfirmedExpenses)].join(', ')}.`],
     );
   }
 

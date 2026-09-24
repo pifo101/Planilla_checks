@@ -97,13 +97,16 @@ test('no elige silenciosamente entre nombres distintos', () => {
   assert.equal(normalize(fixture).reason, 'MULTIPLE_CLIENT_NAMES');
 });
 
-test('marca Gasto02 distinto de cero como regla no confirmada', () => {
+test('usa solo Gasto01 como descuento aunque Gasto02 y Gasto03 tengan valores', () => {
   const fixture = structuredClone(fixtures.dorcas);
-  fixture[1].Gasto02 = 10;
+  fixture[1].Gasto01 = 600;
+  fixture[1].Gasto02 = 100;
+  fixture[1].Gasto03 = 50;
   const result = normalize(fixture);
 
-  assert.equal(result.reason, 'UNCONFIRMED_EXPENSE_FIELDS');
-  assert.match(result.warnings[0], /Gasto02/);
+  assert.equal(result.supported, true);
+  assert.equal(result.descuentos, 600);
+  assert.equal(result.montoAprobado, 12000);
 });
 
 test('no usa silenciosamente Gasto01 de un abono en una distribucion mixta', () => {
