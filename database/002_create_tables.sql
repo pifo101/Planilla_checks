@@ -1,6 +1,3 @@
-USE [PlanillaChecksDB];
-GO
-
 IF OBJECT_ID(N'dbo.agencias', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.agencias (

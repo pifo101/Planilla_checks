@@ -22,6 +22,27 @@ async function findByEmail(email) {
   return result.recordset[0] || null;
 }
 
+async function findById(id) {
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('id', sql.Int, id)
+    .query(`
+      SELECT u.id,
+             u.nombre,
+             u.email,
+             u.rol,
+             u.agencia_id AS agenciaId,
+             u.activo,
+             a.nombre AS agenciaNombre,
+             a.activo AS agenciaActivo
+      FROM dbo.usuarios AS u
+      LEFT JOIN dbo.agencias AS a ON a.id = u.agencia_id
+      WHERE u.id = @id;
+    `);
+
+  return result.recordset[0] || null;
+}
+
 async function create({ nombre, email, passwordHash, rol, agenciaId = null, activo = true }) {
   const pool = await getPool();
   const result = await pool.request()
@@ -43,5 +64,6 @@ async function create({ nombre, email, passwordHash, rol, agenciaId = null, acti
 
 module.exports = {
   findByEmail,
+  findById,
   create,
 };

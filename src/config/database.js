@@ -5,10 +5,13 @@ let poolPromise;
 
 function getDatabaseConfig() {
   const server = String(process.env.DB_SERVER || '').trim();
-  const database = String(process.env.DB_DATABASE || 'PlanillaChecksDB').trim();
+  const database = String(process.env.DB_DATABASE || '').trim();
 
   if (!server) {
     throw new Error('DB_SERVER es obligatorio para conectar con SQL Server.');
+  }
+  if (!database) {
+    throw new Error('DB_DATABASE es obligatorio para conectar con SQL Server.');
   }
 
   return {
@@ -57,6 +60,7 @@ async function closePool() {
 
 module.exports = {
   sql,
+  getDatabaseConfig,
   getPool,
   closePool,
 };

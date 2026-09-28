@@ -10,6 +10,7 @@ const authRoutes = require('./routes/auth.routes');
 const adminRoutes = require('./routes/admin.routes');
 const assistantRoutes = require('./routes/assistant.routes');
 const accountingRoutes = require('./routes/accounting.routes');
+const apiRoutes = require('./routes/api.routes');
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use(indexRoutes);
 app.use('/admin', adminRoutes);
 app.use('/asistente', assistantRoutes);
 app.use('/contabilidad', accountingRoutes);
+app.use('/api', apiRoutes);
 
 app.use((req, res) => {
   res.status(404).render('404', { pageTitle: 'Pagina no encontrada' });
@@ -59,6 +61,13 @@ app.use((error, req, res, next) => {
 
   if (res.headersSent) {
     return next(error);
+  }
+
+  if (req.originalUrl.startsWith('/api/')) {
+    return res.status(500).json({
+      success: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Error interno del servidor.' },
+    });
   }
 
   return res.status(500).render('500', {

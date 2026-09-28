@@ -47,4 +47,8 @@ La decision temporal es conservar `planillas.numero_acta` como nullable. Esto pe
 
 `src/config/database.js` mantiene un unico pool reutilizable de `mssql/msnodesqlv8`. Los repositorios contienen SQL parametrizado; los servicios aplican reglas que dependen del usuario autenticado. `planilla.repository.js` crea la planilla y todas sus solicitudes dentro de una transaccion, con rollback ante cualquier error.
 
+`DB_DATABASE` es obligatorio. `001_create_database.sql` es un bootstrap opcional y crea unicamente la base inicial predeterminada `PlanillaChecksDB`; una base con otro nombre debe existir previamente. `002_create_tables.sql` y `003_create_indexes.sql` no contienen `USE`: deben ejecutarse con `sqlcmd -d "NombreBase"` y operan exclusivamente sobre esa conexion seleccionada. La verificacion integral compara `DB_NAME()` con `DB_DATABASE` antes de crear datos temporales.
+
+Las pruebas de integracion exigen una base separada mediante `TEST_DB_DATABASE`. El nombre debe terminar en `TestDB`, ser distinto de `DB_DATABASE` y existir previamente. La suite no crea ni elimina bases. La configuracion TLS definitiva de SQL Server depende de la infraestructura de despliegue; el entorno actual usa SQL Server Express local.
+
 Las sesiones HTTP siguen almacenandose en memoria por ahora. No contienen hashes ni contrasenas y solo guardan identidad, rol y agencia. Antes de desplegar varias instancias de la aplicacion debe configurarse un almacen de sesiones compartido.
