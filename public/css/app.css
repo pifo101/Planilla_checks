@@ -570,6 +570,61 @@ hr {
   border-color: var(--color-border);
 }
 
+.admin-form-card {
+  max-width: 1080px;
+}
+
+.admin-form-card .card-footer {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  border-radius: 0 0 1rem 1rem;
+}
+
+.admin-form-feedback {
+  max-width: 1080px;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-form-feedback:not(.d-none) {
+  display: flex;
+  gap: 1rem;
+}
+
+.form-section-heading {
+  display: flex;
+  gap: .85rem;
+  align-items: center;
+}
+
+.form-section-icon {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border-radius: .75rem;
+}
+
+.required-mark {
+  color: var(--color-error);
+}
+
+.password-toggle {
+  min-width: 44px;
+  background: var(--color-surface);
+}
+
+.field-context {
+  min-height: 2.4em;
+}
+
+.agency-required .field-context {
+  color: var(--color-primary-hover);
+}
+
 @media (max-width: 991.98px) {
   .app-sidebar {
     position: fixed;
@@ -618,5 +673,10 @@ hr {
   .accounting-financial-summary > div,
   .accounting-totals .row > div {
     border-right: 0 !important;
+  }
+
+  .admin-form-feedback:not(.d-none) {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

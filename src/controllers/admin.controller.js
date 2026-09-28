@@ -16,17 +16,31 @@ const agencies = [
   { code: 'SCL', name: 'San Lucas Toliman', users: 0, status: 'INACTIVA' },
 ];
 
+const roleLabels = {
+  ADMIN: 'Administrador',
+  ASISTENTE: 'Asistente de Agencia',
+  CONTABILIDAD: 'Contabilidad',
+};
+
 function listUsers(req, res) {
   res.render('admin/users', {
     pageTitle: 'Administracion de usuarios',
     users,
     agencies: agencies.filter((agency) => agency.status === 'ACTIVA'),
+    roleLabels,
     summary: {
       total: users.length,
       active: users.filter((user) => user.status === 'ACTIVO').length,
       inactive: users.filter((user) => user.status === 'INACTIVO').length,
       assistants: users.filter((user) => user.role === 'ASISTENTE').length,
     },
+  });
+}
+
+function showNewUser(req, res) {
+  res.render('admin/new-user', {
+    pageTitle: 'Crear usuario',
+    agencies: agencies.filter((agency) => agency.status === 'ACTIVA'),
   });
 }
 
@@ -45,4 +59,5 @@ function listAgencies(req, res) {
 module.exports = {
   listAgencies,
   listUsers,
+  showNewUser,
 };
