@@ -1,6 +1,14 @@
+const authService = require('../services/auth.service');
+
+function homeForRole(role) {
+  if (role === 'ASISTENTE') return '/asistente/nueva-planilla';
+  if (role === 'CONTABILIDAD') return '/contabilidad/planillas';
+  return '/dashboard';
+}
+
 function showLogin(req, res) {
   if (req.session.user) {
-    return res.redirect('/dashboard');
+    return res.redirect(homeForRole(req.session.user.rol));
   }
 
   return res.render('auth/login', {
@@ -9,27 +17,57 @@ function showLogin(req, res) {
   });
 }
 
-function login(req, res) {
-  const username = String(req.body.username || '').trim();
+function regenerateSession(req) {
+  return new Promise((resolve, reject) => {
+    req.session.regenerate((error) => (error ? reject(error) : resolve()));
+  });
+}
 
-  if (!username || !req.body.password) {
+function saveSession(req) {
+  return new Promise((resolve, reject) => {
+    req.session.save((error) => (error ? reject(error) : resolve()));
+  });
+}
+
+async function login(req, res, next) {
+  const email = String(req.body.email || '').trim().toLowerCase();
+
+  if (!email || !req.body.password) {
     return res.status(400).render('auth/login', {
       pageTitle: 'Iniciar sesion',
       layout: false,
-      error: 'Ingresa tu usuario y contrasena.',
-      username,
+      error: 'Ingresa tu correo y contrasena.',
+      email,
     });
   }
 
-  // TODO: reemplazar por consulta SQL y bcrypt.compare().
-  req.session.user = {
-    name: 'Usuario de demostracion',
-    username,
-    role: 'ADMIN',
-    agency: 'Agencia demo',
-  };
+  try {
+    const user = await authService.authenticate(email, req.body.password);
 
-  return res.redirect('/dashboard');
+    if (!user) {
+      return res.status(401).render('auth/login', {
+        pageTitle: 'Iniciar sesion',
+        layout: false,
+        error: 'Correo o contrasena incorrectos.',
+        email,
+      });
+    }
+
+    await regenerateSession(req);
+    req.session.user = {
+      id: user.id,
+      nombre: user.nombre,
+      email: user.email,
+      rol: user.rol,
+      agenciaId: user.agenciaId,
+      agenciaNombre: user.agenciaNombre,
+    };
+    await saveSession(req);
+
+    return res.redirect(homeForRole(user.rol));
+  } catch (error) {
+    return next(error);
+  }
 }
 
 function logout(req, res, next) {
