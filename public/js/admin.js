@@ -53,9 +53,6 @@ if (accountForm) {
     role: accountForm.elements.rol,
     agency: accountForm.elements.agencia,
   };
-  const agencyRequired = accountForm.querySelector('[data-agency-required]');
-  const agencyContext = accountForm.querySelector('[data-agency-context]');
-  const agencyField = accountForm.querySelector('[data-agency-field]');
   const successFeedback = document.querySelector('[data-account-success]');
   const accountSubmit = accountForm.querySelector('[data-account-submit]');
   const errorIds = {
@@ -80,24 +77,6 @@ if (accountForm) {
     field.removeAttribute('aria-invalid');
   };
 
-  const updateAgencyState = () => {
-    const isAssistant = fields.role.value === 'ASISTENTE';
-    fields.agency.disabled = !isAssistant;
-    fields.agency.required = isAssistant;
-    agencyRequired.classList.toggle('d-none', !isAssistant);
-    agencyField.classList.toggle('agency-required', isAssistant);
-    agencyContext.textContent = isAssistant
-      ? 'La agencia identificara la procedencia de las planillas de este usuario.'
-      : 'La agencia no aplica para el rol seleccionado.';
-
-    if (isAssistant) {
-      if (fields.agency.value === 'NO_APLICA') fields.agency.value = '';
-    } else {
-      fields.agency.value = 'NO_APLICA';
-      clearInvalid(fields.agency);
-    }
-  };
-
   const validateForm = () => {
     Object.values(fields).forEach(clearInvalid);
     let valid = true;
@@ -105,9 +84,9 @@ if (accountForm) {
     if (!fields.name.value.trim()) valid = setInvalid(fields.name, 'Ingresa el nombre completo.');
 
     if (!fields.email.value.trim()) {
-      valid = setInvalid(fields.email, 'Ingresa el correo electronico.');
+      valid = setInvalid(fields.email, 'Ingresa el correo institucional.');
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email.value.trim())) {
-      valid = setInvalid(fields.email, 'Ingresa un correo electronico valido.');
+      valid = setInvalid(fields.email, 'Ingresa un correo institucional valido.');
     }
 
     if (!fields.password.value) valid = setInvalid(fields.password, 'Ingresa una contrasena.');
@@ -118,19 +97,13 @@ if (accountForm) {
       valid = setInvalid(fields.confirmation, 'Las contrasenas no coinciden.');
     }
 
-    if (!fields.role.value) valid = setInvalid(fields.role, 'Selecciona un rol.');
+    const roleOptionsAvailable = fields.role.options.length > 1;
+    if (roleOptionsAvailable && !fields.role.value) valid = setInvalid(fields.role, 'Selecciona un rol.');
 
-    if (fields.role.value === 'ASISTENTE' && !fields.agency.value) {
-      valid = setInvalid(fields.agency, 'Selecciona una agencia para el Asistente de Agencia.');
-    }
+    if (!fields.agency.value) valid = setInvalid(fields.agency, 'Selecciona una agencia.');
 
     return valid;
   };
-
-  fields.role.addEventListener('change', () => {
-    clearInvalid(fields.role);
-    updateAgencyState();
-  });
 
   Object.values(fields).forEach((field) => {
     field.addEventListener('input', () => {
@@ -163,10 +136,8 @@ if (accountForm) {
     successFeedback.classList.remove('d-none');
     successFeedback.focus();
     accountForm.reset();
-    updateAgencyState();
   });
 
   accountSubmit.addEventListener('click', () => accountForm.requestSubmit());
 
-  updateAgencyState();
 }

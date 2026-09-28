@@ -39,7 +39,7 @@ function listUsers(req, res) {
 
 function showNewUser(req, res) {
   res.render('admin/new-user', {
-    pageTitle: 'Crear usuario',
+    pageTitle: 'Crear cuenta',
     agencies: agencies.filter((agency) => agency.status === 'ACTIVA'),
   });
 }
