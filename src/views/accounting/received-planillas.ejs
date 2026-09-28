@@ -3,10 +3,53 @@
 <div class="app-body">
   <%- include('../partials/sidebar') %>
   <main class="app-main">
-    <div class="mb-4"><div class="page-eyebrow">Contabilidad</div><h1 class="h3 mb-1">Planillas recibidas</h1><p class="text-muted mb-0">Consulta de demostracion por fecha y agencia.</p></div>
-    <section class="card mb-4"><div class="card-body p-4"><form class="row g-3 align-items-end" method="get"><div class="col-sm-6 col-lg-3"><label class="form-label" for="fecha">Fecha</label><input class="form-control" id="fecha" name="fecha" type="date" value="<%= filters.date %>"></div><div class="col-sm-6 col-lg-3"><label class="form-label" for="agencia">Agencia</label><select class="form-select" id="agencia" name="agencia"><option value="">Todas</option><option <%= filters.agency === 'Central' ? 'selected' : '' %>>Central</option><option <%= filters.agency === 'Norte' ? 'selected' : '' %>>Norte</option><option <%= filters.agency === 'Sur' ? 'selected' : '' %>>Sur</option></select></div><div class="col-auto"><button class="btn btn-primary" type="submit"><i class="bi bi-funnel me-2"></i>Filtrar</button></div><div class="col-auto"><a class="btn btn-outline-secondary" href="/contabilidad/planillas">Limpiar</a></div></form></div></section>
-    <div class="row g-3 mb-4"><div class="col-sm-6"><div class="card"><div class="card-body"><div class="text-muted small">Total aprobado</div><div class="h3 mb-0"><%= currency.format(totals.approved) %></div></div></div></div><div class="col-sm-6"><div class="card"><div class="card-body"><div class="text-muted small">Total monto cheque</div><div class="h3 mb-0"><%= currency.format(totals.checks) %></div></div></div></div></div>
-    <section class="card"><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>ID planilla</th><th>Agencia</th><th>Fecha</th><th>Solicitudes</th><th>Total aprobado</th><th>Total cheques</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead><tbody><% planillas.forEach((planilla) => { %><tr><td class="fw-semibold"><%= planilla.id %></td><td><%= planilla.agency %></td><td><%= planilla.date %></td><td><%= planilla.requests %></td><td><%= currency.format(planilla.approved) %></td><td><%= currency.format(planilla.checkAmount) %></td><td><span class="badge <%= planilla.status === 'PROCESADA' ? 'text-bg-success' : 'text-bg-warning' %>"><%= planilla.status %></span></td><td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/contabilidad/planillas/<%= planilla.id %>"><i class="bi bi-eye me-1"></i>Ver detalle</a></td></tr><% }) %></tbody></table></div></section>
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+      <div><div class="page-eyebrow">Contabilidad</div><h1 class="h3 mb-1">Planillas recibidas</h1><p class="text-muted mb-0">Consulta y gestiona las planillas enviadas por las agencias.</p></div>
+      <span class="demo-label"><i class="bi bi-stars"></i> Datos de demostracion</span>
+    </div>
+
+    <section class="card mb-4" aria-labelledby="accounting-filters-title">
+      <div class="card-body p-4">
+        <h2 class="visually-hidden" id="accounting-filters-title">Filtros de planillas recibidas</h2>
+        <form class="row g-3 align-items-end" data-accounting-filters>
+          <div class="col-6 col-lg-2"><label class="form-label" for="fecha">Fecha</label><input class="form-control" id="fecha" name="fecha" type="date" value="<%= filters.date %>" data-planilla-date></div>
+          <div class="col-6 col-lg-3"><label class="form-label" for="agencia">Agencia</label><select class="form-select" id="agencia" name="agencia" data-planilla-agency><option value="">Todas las agencias</option><% agencies.forEach((agency) => { %><option value="<%= agency %>" <%= filters.agency === agency ? 'selected' : '' %>><%= agency %></option><% }) %></select></div>
+          <div class="col-6 col-lg-2"><label class="form-label" for="estado">Estado</label><select class="form-select" id="estado" name="estado" data-planilla-status><option value="">Todos</option><option value="PENDIENTE" <%= filters.status === 'PENDIENTE' ? 'selected' : '' %>>Pendiente</option><option value="PROCESADO" <%= filters.status === 'PROCESADO' ? 'selected' : '' %>>Procesada</option></select></div>
+          <div class="col-12 col-md-6 col-lg-3"><label class="form-label" for="buscar">Buscar</label><div class="input-group"><span class="input-group-text bg-white"><i class="bi bi-search"></i></span><input class="form-control" id="buscar" name="buscar" type="search" value="<%= filters.search %>" placeholder="Solicitud, cliente o planilla" data-planilla-search></div></div>
+          <div class="col-12 col-lg-2 d-grid"><button class="btn btn-outline-secondary" type="reset"><i class="bi bi-x-circle me-2"></i>Limpiar filtros</button></div>
+        </form>
+      </div>
+    </section>
+
+    <div class="row g-3 mb-4">
+      <% [
+        { label: 'Planillas recibidas', value: planillas.length, icon: 'bi-inbox' },
+        { label: 'Solicitudes', value: totals.requests, icon: 'bi-files' },
+        { label: 'Pendientes', value: totals.pending, icon: 'bi-hourglass-split' },
+        { label: 'Procesadas', value: totals.processed, icon: 'bi-check2-circle' }
+      ].forEach((metric) => { %>
+        <div class="col-6 col-xl-3"><article class="card accounting-summary-card h-100"><div class="card-body d-flex align-items-center gap-3"><span class="metric-icon bg-primary-subtle text-primary"><i class="bi <%= metric.icon %>"></i></span><div><div class="text-muted small"><%= metric.label %></div><div class="h3 mb-0"><%= metric.value %></div></div></div></article></div>
+      <% }) %>
+    </div>
+
+    <section class="mb-4" aria-labelledby="financial-summary-title">
+      <div class="d-flex justify-content-between align-items-center mb-2"><h2 class="h6 mb-0" id="financial-summary-title">Resumen financiero</h2><span class="small text-muted">Valores mock</span></div>
+      <div class="card"><div class="card-body"><div class="row g-3 accounting-financial-summary">
+        <div class="col-6 col-xl-3"><div class="text-muted small">Total aprobado</div><div class="h5 mb-0"><%= currency.format(totals.approved) %></div></div>
+        <div class="col-6 col-xl-3"><div class="text-muted small">Total descuentos</div><div class="h5 mb-0"><%= currency.format(totals.discounts) %></div></div>
+        <div class="col-6 col-xl-3"><div class="text-muted small">Total cancelado</div><div class="h5 mb-0"><%= currency.format(totals.canceled) %></div></div>
+        <div class="col-6 col-xl-3"><div class="text-muted small">Total monto cheque</div><div class="h5 mb-0"><%= currency.format(totals.checks) %></div></div>
+      </div></div></div>
+    </section>
+
+    <section class="card" aria-labelledby="received-table-title">
+      <div class="card-header bg-white border-0 px-4 pt-4 d-flex justify-content-between align-items-center gap-3"><h2 class="h5 mb-0" id="received-table-title">Listado de planillas</h2><span class="small text-muted" data-planilla-count><%= planillas.length %> resultados</span></div>
+      <div class="table-responsive"><table class="table table-hover mb-0"><caption class="visually-hidden">Planillas recibidas de demostracion</caption><thead><tr><th scope="col">Planilla</th><th scope="col">Agencia</th><th scope="col">Fecha de envio</th><th scope="col">Solicitudes</th><th scope="col">Monto aprobado</th><th scope="col">Estado</th><th scope="col" class="text-end">Acciones</th></tr></thead><tbody>
+        <% planillas.forEach((planilla) => { %><tr class="<%= planilla.status === 'PROCESADO' ? 'accounting-row-processed' : '' %>" data-planilla-row data-date="<%= planilla.filterDate %>" data-agency="<%= planilla.agency %>" data-status="<%= planilla.status %>" data-search="<%= `${planilla.id} ${planilla.items.map((item) => `${item.request} ${item.client}`).join(' ')}`.toLowerCase() %>"><td class="fw-semibold"><%= planilla.id %></td><td><%= planilla.agency %></td><td class="text-nowrap"><%= planilla.date %></td><td><%= planilla.items.length %></td><td class="text-nowrap"><%= currency.format(planilla.approved) %></td><td><span class="status-badge status-<%= planilla.status.toLowerCase() %>"><i class="bi <%= planilla.status === 'PROCESADO' ? 'bi-check-circle-fill' : 'bi-clock-fill' %>"></i><%= planilla.status %></span></td><td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/contabilidad/planillas/<%= planilla.id %>"><i class="bi bi-eye me-1"></i>Ver</a></td></tr><% }) %>
+        <tr class="d-none" data-planillas-empty><td class="text-center text-muted py-5" colspan="7"><i class="bi bi-inbox d-block fs-3 mb-2"></i>No hay planillas que coincidan con los filtros.</td></tr>
+      </tbody></table></div>
+    </section>
   </main>
 </div>
+<script src="/js/accounting.js"></script>
 <%- include('../partials/footer') %>
