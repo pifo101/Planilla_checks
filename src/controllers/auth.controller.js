@@ -1,8 +1,14 @@
 const authService = require('../services/auth.service');
 
+function homeForRole(role) {
+  if (role === 'ASISTENTE') return '/asistente/nueva-planilla';
+  if (role === 'CONTABILIDAD') return '/contabilidad/planillas';
+  return '/dashboard';
+}
+
 function showLogin(req, res) {
   if (req.session.user) {
-    return res.redirect('/dashboard');
+    return res.redirect(homeForRole(req.session.user.rol));
   }
 
   return res.render('auth/login', {
@@ -58,7 +64,7 @@ async function login(req, res, next) {
     };
     await saveSession(req);
 
-    return res.redirect('/dashboard');
+    return res.redirect(homeForRole(user.rol));
   } catch (error) {
     return next(error);
   }

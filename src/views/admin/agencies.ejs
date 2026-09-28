@@ -1,0 +1,29 @@
+<%- include('../partials/head') %>
+<%- include('../partials/navbar') %>
+<div class="app-body">
+  <%- include('../partials/sidebar') %>
+  <main class="app-main">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+      <div><div class="page-eyebrow">Administracion</div><h1 class="h3 mb-1">Agencias</h1><p class="text-muted mb-0">Consulta las agencias y sus usuarios asociados.</p></div>
+      <span class="demo-label"><i class="bi bi-stars"></i> Datos de demostracion</span>
+    </div>
+    <div class="row g-3 mb-4">
+      <% [
+        { label: 'Total agencias', value: summary.total, icon: 'bi-buildings' },
+        { label: 'Activas', value: summary.active, icon: 'bi-building-check' },
+        { label: 'Usuarios asociados', value: summary.associatedUsers, icon: 'bi-people' }
+      ].forEach((metric) => { %>
+        <div class="col-sm-6 col-xl-4"><article class="card h-100"><div class="card-body d-flex align-items-center gap-3"><span class="metric-icon bg-primary-subtle text-primary"><i class="bi <%= metric.icon %>"></i></span><div><div class="text-muted small"><%= metric.label %></div><div class="h3 mb-0"><%= metric.value %></div></div></div></article></div>
+      <% }) %>
+    </div>
+    <section class="card" aria-labelledby="agencies-table-title">
+      <div class="card-header bg-white border-0 px-4 pt-4"><h2 class="h5 mb-0" id="agencies-table-title">Directorio de agencias</h2></div>
+      <div class="table-responsive"><table class="table table-hover mb-0"><caption class="visually-hidden">Listado de agencias de demostracion</caption><thead><tr><th scope="col">Codigo</th><th scope="col">Agencia</th><th scope="col">Usuarios</th><th scope="col">Estado</th><th scope="col" class="text-end">Acciones</th></tr></thead><tbody>
+        <% agencies.forEach((agency) => { %><tr><td><span class="agency-code"><%= agency.code %></span></td><td class="fw-semibold"><%= agency.name %></td><td><%= agency.users %></td><td><span class="status-badge status-<%= agency.status.toLowerCase() %>"><i class="bi bi-circle-fill"></i><%= agency.status %></span></td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" type="button" data-prototype-action="Editar agencia"><i class="bi bi-pencil me-1"></i>Editar</button></td></tr><% }) %>
+      </tbody></table></div>
+    </section>
+    <div class="alert alert-info mt-3 d-none" role="status" data-admin-feedback></div>
+  </main>
+</div>
+<script src="/js/admin.js"></script>
+<%- include('../partials/footer') %>

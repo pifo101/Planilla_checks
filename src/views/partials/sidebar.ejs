@@ -1,25 +1,41 @@
+<%
+  const navigationRole = currentUser ? currentUser.rol : null;
+  const showDemoNavigation = !currentUser;
+  // Frontend visibility only. Backend authorization must remain authoritative when enabled.
+%>
 <aside class="app-sidebar">
   <nav aria-label="Navegacion principal">
-    <a class="sidebar-link <%= currentPath === '/dashboard' ? 'active' : '' %>" href="/dashboard">
-      <i class="bi bi-grid-1x2"></i><span>Dashboard</span>
-    </a>
+    <% if (showDemoNavigation || navigationRole === 'ADMIN') { %>
+      <a class="sidebar-link <%= currentPath === '/dashboard' ? 'active' : '' %>" href="/dashboard" <%- currentPath === '/dashboard' ? 'aria-current="page"' : '' %>>
+        <i class="bi bi-grid-1x2"></i><span>Dashboard</span>
+      </a>
+    <% } %>
 
-    <div class="sidebar-label">ASISTENTE</div>
-    <a class="sidebar-link <%= currentPath === '/asistente/nueva-planilla' ? 'active' : '' %>" href="/asistente/nueva-planilla">
-      <i class="bi bi-file-earmark-plus"></i><span>Nueva planilla</span>
-    </a>
-    <a class="sidebar-link <%= currentPath.startsWith('/asistente/planillas') ? 'active' : '' %>" href="/asistente/planillas">
-      <i class="bi bi-send"></i><span>Planillas enviadas</span>
-    </a>
+    <% if (showDemoNavigation || navigationRole === 'ASISTENTE') { %>
+      <div class="sidebar-label">ASISTENTE DE AGENCIA</div>
+      <a class="sidebar-link <%= currentPath === '/asistente/nueva-planilla' ? 'active' : '' %>" href="/asistente/nueva-planilla" <%- currentPath === '/asistente/nueva-planilla' ? 'aria-current="page"' : '' %>>
+        <i class="bi bi-file-earmark-plus"></i><span>Nueva planilla</span>
+      </a>
+      <a class="sidebar-link <%= currentPath.startsWith('/asistente/planillas') ? 'active' : '' %>" href="/asistente/planillas" <%- currentPath.startsWith('/asistente/planillas') ? 'aria-current="page"' : '' %>>
+        <i class="bi bi-send"></i><span>Planillas enviadas</span>
+      </a>
+    <% } %>
 
-    <div class="sidebar-label">CONTABILIDAD</div>
-    <a class="sidebar-link <%= currentPath.startsWith('/contabilidad/planillas') ? 'active' : '' %>" href="/contabilidad/planillas">
-      <i class="bi bi-inbox"></i><span>Planillas recibidas</span>
-    </a>
+    <% if (showDemoNavigation || navigationRole === 'CONTABILIDAD') { %>
+      <div class="sidebar-label">CONTABILIDAD</div>
+      <a class="sidebar-link <%= currentPath.startsWith('/contabilidad/planillas') ? 'active' : '' %>" href="/contabilidad/planillas" <%- currentPath.startsWith('/contabilidad/planillas') ? 'aria-current="page"' : '' %>>
+        <i class="bi bi-inbox"></i><span>Planillas recibidas</span>
+      </a>
+    <% } %>
 
-    <div class="sidebar-label">ADMINISTRACION</div>
-    <a class="sidebar-link <%= currentPath === '/admin/usuarios' ? 'active' : '' %>" href="/admin/usuarios">
-      <i class="bi bi-people"></i><span>Usuarios</span>
-    </a>
+    <% if (showDemoNavigation || navigationRole === 'ADMIN') { %>
+      <div class="sidebar-label">ADMINISTRACION</div>
+      <a class="sidebar-link <%= currentPath.startsWith('/admin/usuarios') ? 'active' : '' %>" href="/admin/usuarios" <%- currentPath.startsWith('/admin/usuarios') ? 'aria-current="page"' : '' %>>
+        <i class="bi bi-people"></i><span>Usuarios</span>
+      </a>
+      <a class="sidebar-link <%= currentPath === '/admin/agencias' ? 'active' : '' %>" href="/admin/agencias" <%- currentPath === '/admin/agencias' ? 'aria-current="page"' : '' %>>
+        <i class="bi bi-buildings"></i><span>Agencias</span>
+      </a>
+    <% } %>
   </nav>
 </aside>

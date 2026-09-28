@@ -3,34 +3,90 @@
 <div class="app-body">
   <%- include('../partials/sidebar') %>
   <main class="app-main">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
       <div>
         <div class="page-eyebrow">Administracion</div>
-        <h1 class="h3 mb-1">Usuarios</h1>
-        <p class="text-muted mb-0">Vista inicial con registros de demostracion.</p>
+        <h1 class="h3 mb-1">Administracion de usuarios</h1>
+        <p class="text-muted mb-0">Gestiona usuarios, roles, agencias y acceso al sistema.</p>
       </div>
-      <button class="btn btn-primary" type="button" disabled><i class="bi bi-person-plus me-2"></i>Nuevo usuario</button>
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <span class="demo-label"><i class="bi bi-stars"></i> Datos de demostracion</span>
+        <a class="btn btn-primary" href="/crear-cuenta"><i class="bi bi-person-plus me-2"></i>Crear usuario</a>
+      </div>
     </div>
 
-    <section class="card">
+    <div class="row g-3 mb-4">
+      <% [
+        { label: 'Usuarios totales', value: summary.total, icon: 'bi-people' },
+        { label: 'Usuarios activos', value: summary.active, icon: 'bi-person-check' },
+        { label: 'Usuarios inactivos', value: summary.inactive, icon: 'bi-person-dash' },
+        { label: 'Asistentes', value: summary.assistants, icon: 'bi-person-workspace' }
+      ].forEach((metric) => { %>
+        <div class="col-6 col-xl-3">
+          <article class="card admin-summary-card h-100">
+            <div class="card-body d-flex align-items-center gap-3">
+              <span class="metric-icon bg-primary-subtle text-primary"><i class="bi <%= metric.icon %>"></i></span>
+              <div><div class="text-muted small"><%= metric.label %></div><div class="h3 mb-0"><%= metric.value %></div></div>
+            </div>
+          </article>
+        </div>
+      <% }) %>
+    </div>
+
+    <section class="card mb-4" aria-labelledby="user-filters-title">
+      <div class="card-body p-4">
+        <h2 class="visually-hidden" id="user-filters-title">Filtros de usuarios</h2>
+        <form class="row g-3 align-items-end" data-admin-filters>
+          <div class="col-12 col-lg-4">
+            <label class="form-label" for="userSearch">Buscar</label>
+            <div class="input-group"><span class="input-group-text bg-white"><i class="bi bi-search"></i></span><input class="form-control" id="userSearch" type="search" placeholder="Nombre o correo" data-user-search></div>
+          </div>
+          <div class="col-6 col-md-4 col-lg-2">
+            <label class="form-label" for="roleFilter">Rol</label>
+            <select class="form-select" id="roleFilter" data-user-role><option value="">Todos</option><option value="ADMIN">Administrador</option><option value="ASISTENTE">Asistente de Agencia</option><option value="CONTABILIDAD">Contabilidad</option></select>
+          </div>
+          <div class="col-6 col-md-4 col-lg-3">
+            <label class="form-label" for="agencyFilter">Agencia</label>
+            <select class="form-select" id="agencyFilter" data-user-agency><option value="">Todas las agencias</option><option>Oficina central</option><% agencies.forEach((agency) => { %><option><%= agency.name %></option><% }) %></select>
+          </div>
+          <div class="col-6 col-md-4 col-lg-2">
+            <label class="form-label" for="statusFilter">Estado</label>
+            <select class="form-select" id="statusFilter" data-user-status><option value="">Todos</option><option>ACTIVO</option><option>INACTIVO</option></select>
+          </div>
+          <div class="col-6 col-lg-1 d-grid"><button class="btn btn-outline-secondary" type="reset" aria-label="Limpiar filtros"><i class="bi bi-arrow-counterclockwise"></i></button></div>
+        </form>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="users-table-title">
+      <div class="card-header bg-white border-0 px-4 pt-4 d-flex justify-content-between align-items-center gap-3">
+        <h2 class="h5 mb-0" id="users-table-title">Usuarios registrados</h2>
+        <span class="small text-muted" data-user-count><%= users.length %> resultados</span>
+      </div>
       <div class="table-responsive">
         <table class="table table-hover mb-0">
-          <thead><tr><th>Nombre</th><th>Usuario / email</th><th>Rol</th><th>Agencia</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
+          <caption class="visually-hidden">Listado de usuarios de demostracion</caption>
+          <thead><tr><th scope="col">Usuario</th><th scope="col">Correo</th><th scope="col">Rol</th><th scope="col">Agencia</th><th scope="col">Estado</th><th scope="col">Ultimo acceso</th><th scope="col" class="text-end">Acciones</th></tr></thead>
           <tbody>
             <% users.forEach((user) => { %>
-              <tr>
-                <td class="fw-semibold"><%= user.name %></td>
-                <td><%= user.email %></td>
-                <td><span class="badge text-bg-light"><%= user.role %></span></td>
+              <tr data-user-row data-search="<%= `${user.name} ${user.email}`.toLowerCase() %>" data-role="<%= user.role %>" data-agency="<%= user.agency %>" data-status="<%= user.status %>">
+                <td><div class="d-flex align-items-center gap-2"><span class="user-avatar"><%= user.name.split(' ').map((part) => part[0]).slice(0, 2).join('') %></span><span class="fw-semibold"><%= user.name %></span></div></td>
+                <td><a href="mailto:<%= user.email %>"><%= user.email %></a></td>
+                <td><span class="badge role-badge role-<%= user.role.toLowerCase() %>"><%= roleLabels[user.role] %></span></td>
                 <td><%= user.agency %></td>
-                <td><span class="badge <%= user.status === 'ACTIVO' ? 'text-bg-success' : 'text-bg-secondary' %>"><%= user.status %></span></td>
-                <td class="text-end"><button class="btn btn-sm btn-outline-secondary" type="button" disabled><i class="bi bi-pencil"></i> Editar</button></td>
+                <td><span class="status-badge status-<%= user.status.toLowerCase() %>"><i class="bi bi-circle-fill"></i><%= user.status %></span></td>
+                <td class="text-muted text-nowrap"><%= user.lastAccess %></td>
+                <td class="text-end"><div class="dropdown"><button class="btn btn-sm btn-light" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Acciones para <%= user.name %>"><i class="bi bi-three-dots"></i></button><ul class="dropdown-menu dropdown-menu-end"><li><button class="dropdown-item" type="button" data-prototype-action="Ver usuario"><i class="bi bi-eye me-2"></i>Ver</button></li><li><button class="dropdown-item" type="button" data-prototype-action="Editar usuario"><i class="bi bi-pencil me-2"></i>Editar</button></li><li><button class="dropdown-item" type="button" data-prototype-action="<%= user.status === 'ACTIVO' ? 'Desactivar' : 'Activar' %> usuario"><i class="bi <%= user.status === 'ACTIVO' ? 'bi-person-dash' : 'bi-person-check' %> me-2"></i><%= user.status === 'ACTIVO' ? 'Desactivar' : 'Activar' %></button></li></ul></div></td>
               </tr>
             <% }) %>
+            <tr class="d-none" data-users-empty><td class="text-center text-muted py-5" colspan="7"><i class="bi bi-search d-block fs-3 mb-2"></i>No se encontraron usuarios con esos filtros.</td></tr>
           </tbody>
         </table>
       </div>
     </section>
+
+    <div class="alert alert-info mt-3 d-none" role="status" data-admin-feedback></div>
   </main>
 </div>
+<script src="/js/admin.js"></script>
 <%- include('../partials/footer') %>
