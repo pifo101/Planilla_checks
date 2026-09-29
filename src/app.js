@@ -14,6 +14,13 @@ const apiRoutes = require('./routes/api.routes');
 
 const app = express();
 
+function formatSqlCurrency(value) {
+  const match = String(value).match(/^(\d+)(?:\.(\d{1,2}))?$/);
+  if (!match) return 'Q\u00a00.00';
+  const whole = match[1].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `Q\u00a0${whole}.${(match[2] || '').padEnd(2, '0')}`;
+}
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
@@ -42,6 +49,12 @@ app.use((req, res, next) => {
     style: 'currency',
     currency: 'GTQ',
   });
+  res.locals.dateTime = new Intl.DateTimeFormat('es-GT', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'UTC',
+  });
+  res.locals.sqlCurrency = { format: formatSqlCurrency };
   next();
 });
 

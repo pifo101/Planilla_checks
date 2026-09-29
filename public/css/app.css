@@ -500,6 +500,9 @@ hr {
 
 .status-activo,
 .status-activa,
+.status-enviada,
+.status-recibida,
+.status-procesada,
 .status-procesado {
   color: #087443;
   background: #ecfdf3;

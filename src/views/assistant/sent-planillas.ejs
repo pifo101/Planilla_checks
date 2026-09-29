@@ -3,25 +3,40 @@
 <div class="app-body">
   <%- include('../partials/sidebar') %>
   <main class="app-main">
-    <div class="mb-4"><div class="page-eyebrow">Asistente de agencia</div><h1 class="h3 mb-1">Planillas enviadas</h1><p class="text-muted mb-0">Historial de demostracion de planillas enviadas.</p></div>
+    <div class="mb-4"><div class="page-eyebrow">Asistente de agencia</div><h1 class="h3 mb-1">Planillas enviadas</h1><p class="text-muted mb-0">Historial de planillas enviadas por tu agencia.</p></div>
     <section class="card mb-4">
       <div class="card-body p-4">
         <form class="row g-3 align-items-end" method="get">
-          <div class="col-sm-6 col-lg-4"><label class="form-label" for="fecha">Fecha</label><input class="form-control" id="fecha" name="fecha" type="date" value="<%= selectedDate %>"></div>
+          <div class="col-sm-6 col-lg-4"><label class="form-label" for="fecha">Fecha de envio</label><input class="form-control" id="fecha" name="fecha" type="date" value="<%= selectedDate %>" required></div>
           <div class="col-auto"><button class="btn btn-primary" type="submit"><i class="bi bi-funnel me-2"></i>Filtrar</button></div>
-          <div class="col-auto"><a class="btn btn-outline-secondary" href="/asistente/planillas">Limpiar</a></div>
+          <div class="col-auto"><a class="btn btn-outline-secondary" href="/asistente/planillas">Hoy</a></div>
         </form>
       </div>
     </section>
     <section class="card">
       <div class="table-responsive">
         <table class="table table-hover mb-0">
-          <thead><tr><th>ID planilla</th><th>Agencia</th><th>Fecha</th><th>Solicitudes</th><th>Total aprobado</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
+          <caption class="visually-hidden">Planillas enviadas el <%= selectedDate %></caption>
+          <thead><tr><th>Codigo</th><th>Fecha de envio</th><th>Agencia</th><th>Registros</th><th>Total aprobado</th><th>Total cancelado</th><th>Descuentos</th><th>Monto cheque</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
           <tbody>
-            <% planillas.forEach((planilla) => { %><tr><td class="fw-semibold"><%= planilla.id %></td><td><%= planilla.agency %></td><td><%= planilla.date %></td><td><%= planilla.requests %></td><td><%= currency.format(planilla.approved) %></td><td><span class="badge text-bg-light"><%= planilla.status %></span></td><td class="text-end"><a class="btn btn-sm btn-outline-primary" href="/asistente/planillas/<%= planilla.id %>"><i class="bi bi-eye me-1"></i>Ver detalle</a></td></tr><% }) %>
+            <% if (planillas.length === 0) { %>
+              <tr><td class="text-center text-muted py-5" colspan="10">No hay planillas enviadas en la fecha seleccionada.</td></tr>
+            <% } %>
+            <% planillas.forEach((planilla) => { %>
+              <tr><td class="fw-semibold"><%= planilla.codigo %></td><td class="text-nowrap"><%= dateTime.format(planilla.fechaEnvio) %></td><td><%= planilla.agenciaNombre %></td><td><%= planilla.cantidadRegistros %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalAprobado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalCancelado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalDescuentos) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalMontoCheque) %></td><td><span class="status-badge status-<%= planilla.estado.toLowerCase() %>"><%= planilla.estado %></span></td><td class="text-end"><a class="btn btn-sm btn-outline-primary text-nowrap" href="/asistente/planillas/<%= planilla.id %>"><i class="bi bi-eye me-1"></i>Ver detalle</a></td></tr>
+            <% }) %>
           </tbody>
         </table>
       </div>
+      <% if (totalPages > 1) { %>
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+          <span class="text-muted small"><%= total %> planillas · Pagina <%= page %> de <%= totalPages %></span>
+          <div class="btn-group" aria-label="Paginacion">
+            <a class="btn btn-sm btn-outline-secondary <%= page === 1 ? 'disabled' : '' %>" href="?fecha=<%= selectedDate %>&page=<%= page - 1 %>" <%= page === 1 ? 'aria-disabled=true tabindex=-1' : '' %>>Anterior</a>
+            <a class="btn btn-sm btn-outline-secondary <%= page === totalPages ? 'disabled' : '' %>" href="?fecha=<%= selectedDate %>&page=<%= page + 1 %>" <%= page === totalPages ? 'aria-disabled=true tabindex=-1' : '' %>>Siguiente</a>
+          </div>
+        </div>
+      <% } %>
     </section>
   </main>
 </div>
