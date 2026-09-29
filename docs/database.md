@@ -23,7 +23,7 @@ Usuario --- crea Planilla
 ## Restricciones
 
 - `agencias.codigo`, `usuarios.email` y `planillas.codigo` son unicos.
-- `solicitudes_planilla.numero_solicitud` es unico globalmente porque una solicitud enviada no puede volver a enviarse.
+- `(solicitudes_planilla.numero_solicitud, solicitudes_planilla.miembro_id)` es unico. `miembro_id` es `NULL` para individuales y contiene el `ID` de la emision para grupales, permitiendo varias filas legitimas de una misma solicitud sin repetir un miembro.
 - `solicitudes_planilla.numero_cheque` es unico globalmente y no admite valores nulos.
 - Los importes usan `DECIMAL(18,2)` y no admiten valores negativos.
 - El monto aprobado debe coincidir con descuentos, cheque y monto cancelado; el servicio lo calcula antes de insertar.
@@ -41,13 +41,15 @@ La decision temporal es conservar `planillas.numero_acta` como nullable. Esto pe
 - `IX_planillas_fecha_agencia` apoya consultas por fecha y agencia.
 - `IX_planillas_agencia_estado` apoya historial y filtros por agencia/estado.
 - `IX_solicitudes_planilla_estado` apoya el detalle y procesamiento de solicitudes de una planilla.
-- Las restricciones UNIQUE crean indices para codigo, correo, numero de solicitud y numero de cheque.
+- Las restricciones UNIQUE crean indices para codigo, correo, identidad solicitud/miembro y numero de cheque.
 
 ## Persistencia Node
 
-`src/config/database.js` mantiene un unico pool reutilizable de `mssql/msnodesqlv8`. Los repositorios contienen SQL parametrizado; los servicios aplican reglas que dependen del usuario autenticado. `planilla.repository.js` crea la planilla y todas sus solicitudes dentro de una transaccion, con rollback ante cualquier error. El envio usa estado `ENVIADA` y una fecha de envio generada en el servidor.
+`src/config/database.js` mantiene un unico pool reutilizable de `mssql/msnodesqlv8`. Los repositorios contienen SQL parametrizado; los servicios aplican reglas que dependen del usuario autenticado. `planilla.repository.js` crea la planilla y todas sus solicitudes o miembros dentro de una transaccion, con rollback ante cualquier error. El envio usa estado `ENVIADA` y una fecha de envio generada en el servidor.
 
-`POST /api/planillas` no acepta agencia, usuario creador, codigo, estado, fechas ni montos libres como autoridad del navegador. El servicio toma usuario y agencia de la sesion revalidada, verifica el snapshot firmado emitido durante la consulta, genera un codigo tecnico `PLN-<UUID>` y comprueba disponibilidad antes de abrir la transaccion. Las restricciones UNIQUE de `numero_solicitud`, `numero_cheque` y `codigo` permanecen como defensa ante condiciones de carrera; los errores de conflicto se traducen sin exponer detalles SQL.
+`POST /api/planillas` no acepta agencia, usuario creador, codigo, estado, fechas ni montos libres como autoridad del navegador. El servicio toma usuario y agencia de la sesion revalidada, verifica el snapshot firmado emitido durante la consulta, genera un codigo tecnico `PLN-<UUID>` y comprueba disponibilidad antes de abrir la transaccion. Las restricciones UNIQUE de `(numero_solicitud, miembro_id)`, `numero_cheque` y `codigo` permanecen como defensa ante condiciones de carrera; los errores de conflicto se traducen sin exponer detalles SQL.
+
+`database/004_group_members.sql` migra instalaciones existentes: agrega `miembro_id`, elimina `UQ_solicitudes_numero_solicitud` y crea `UQ_solicitudes_numero_solicitud_miembro`. No elimina ni recrea tablas ni bases.
 
 El borrador del navegador no es persistencia. El historial consultable y el procesamiento de Contabilidad continuan pendientes aunque las planillas enviadas ya queden almacenadas.
 

@@ -55,6 +55,7 @@ $database = $env:DB_DATABASE
 sqlcmd -S ".\SQLEXPRESS" -E -C -i "database\001_create_database.sql" -b
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\002_create_tables.sql" -b
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\003_create_indexes.sql" -b
+sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\004_group_members.sql" -b
 ```
 
 No se incluyen agencias de demostracion. Las agencias institucionales deben cargarse con sus codigos y nombres reales antes de crear asistentes.

@@ -14,7 +14,7 @@ const {
 const userRepository = require('../src/repositories/user.repository');
 const authService = require('../src/services/auth.service');
 const planillaService = require('../src/services/planilla.service');
-const { createSubmissionToken } = require('../src/services/planilla-token.service');
+const { createGroupFingerprint, createSubmissionToken } = require('../src/services/planilla-token.service');
 const planillaRepository = require('../src/repositories/planilla.repository');
 
 const suffix = `${Date.now()}${crypto.randomInt(1000, 9999)}`;
@@ -210,6 +210,74 @@ async function main() {
   );
   assert.equal(createdPlanilla.agenciaId, agenciaId);
   assert.equal(createdPlanilla.estado, 'ENVIADA');
+
+  const groupedRequestNumber = `6${suffix}`;
+  const groupedFingerprint = createGroupFingerprint(['19536', '19537'], new Date());
+  const groupedRequests = ['19536', '19537'].map((miembroId, index) => {
+    const numeroCheque = `GRP-${index}-${suffix}`;
+    return {
+      numeroSolicitud: groupedRequestNumber,
+      miembroId,
+      numeroCheque,
+      submissionToken: createSubmissionToken(serviceUser.id, groupedRequestNumber, {
+        cliente: `Miembro temporal ${index + 1}`,
+        metodologia: 'GRUPAL',
+        miembroId,
+        cantidadMiembros: 2,
+        grupoFingerprint: groupedFingerprint,
+        montoAprobado: 2000,
+        montoCancelado: 0,
+        descuentos: 100,
+        montoCheque: 1900,
+      }),
+    };
+  });
+  const groupedPlanilla = await planillaService.createPlanilla(
+    serviceUser,
+    { solicitudes: groupedRequests },
+    { generateCode: () => `PLN-G-${suffix}` },
+  );
+  assert.equal(groupedPlanilla.solicitudes.length, 2);
+  const groupedRows = await pool.request()
+    .input('numeroSolicitud', sql.NVarChar(50), groupedRequestNumber)
+    .query(`
+      SELECT miembro_id AS miembroId, numero_cheque AS numeroCheque
+      FROM dbo.solicitudes_planilla
+      WHERE numero_solicitud = @numeroSolicitud
+      ORDER BY miembro_id;
+    `);
+  assert.deepEqual(groupedRows.recordset.map((row) => row.miembroId), ['19536', '19537']);
+
+  const rollbackGroupCode = `PLN-GR-${suffix}`;
+  await assert.rejects(
+    planillaRepository.createWithSolicitudes({
+      codigo: rollbackGroupCode,
+      agenciaId,
+      usuarioId: serviceUser.id,
+      fechaEnvio: new Date(),
+      estado: 'ENVIADA',
+    }, [{
+      ...repositorySolicitud,
+      numeroSolicitud: `5${suffix}`,
+      miembroId: '20001',
+      numeroCheque: `ROLLBACK-${suffix}`,
+    }, {
+      ...repositorySolicitud,
+      numeroSolicitud: `5${suffix}`,
+      miembroId: '20002',
+      numeroCheque: solicitud.numeroCheque,
+    }]),
+    (error) => error.number === 2627 || error.number === 2601,
+  );
+  const rolledBackGroup = await pool.request()
+    .input('codigo', sql.NVarChar(40), rollbackGroupCode)
+    .input('numeroSolicitud', sql.NVarChar(50), `5${suffix}`)
+    .query(`
+      SELECT
+        (SELECT COUNT(*) FROM dbo.planillas WHERE codigo = @codigo) AS planillas,
+        (SELECT COUNT(*) FROM dbo.solicitudes_planilla WHERE numero_solicitud = @numeroSolicitud) AS miembros;
+    `);
+  assert.deepEqual(rolledBackGroup.recordset[0], { planillas: 0, miembros: 0 });
 
   const lockTransaction = new sql.Transaction(pool);
   await lockTransaction.begin();

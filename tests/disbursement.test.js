@@ -152,7 +152,7 @@ test('ignora Gasto01 no cero del abono en una distribucion individual', () => {
   });
 });
 
-test('cuenta solo emisiones de cheque para metodologia grupal sin calcular montos', () => {
+test('no calcula un grupo cuyos miembros no tienen identidad confirmada', () => {
   const fixture = structuredClone(fixtures.individualWithLoanPayment);
   fixture[0].Gasto01 = 999;
   fixture.push({
@@ -165,8 +165,53 @@ test('cuenta solo emisiones de cheque para metodologia grupal sin calcular monto
   assert.equal(result.cantidadCheques, 2);
   assert.equal(result.metodologia, 'GRUPAL');
   assert.equal(result.supported, false);
-  assert.equal(result.reason, 'GROUPED_AMOUNT_CALCULATION_UNCONFIRMED');
+  assert.equal(result.reason, 'GROUPED_MEMBER_IDENTITY_UNCONFIRMED');
   assert.equal(result.montoAprobado, null);
+});
+
+test('convierte N emisiones identificadas sin abonos en N miembros calculados', () => {
+  const fixture = [1, 2, 3].map((id) => ({
+    ...structuredClone(fixtures.individualWithLoanPayment[1]),
+    ID: 19000 + id,
+    NombreEnCheque: `MIEMBRO ${id}`,
+    OrdenPago: 13000 + id,
+    Gasto01: 100,
+    ValorNeto: 1900,
+  }));
+  const result = normalize(fixture);
+
+  assert.equal(result.supported, true);
+  assert.equal(result.metodologia, 'GRUPAL');
+  assert.equal(result.miembros.length, 3);
+  assert.deepEqual(result.miembros.map((item) => item.miembroId), ['19001', '19002', '19003']);
+  assert.deepEqual(result.miembros.map((item) => item.cliente), ['MIEMBRO 1', 'MIEMBRO 2', 'MIEMBRO 3']);
+  assert.ok(result.miembros.every((item) => item.calculado && item.montoAprobado === 2000));
+});
+
+test('no inventa asociacion de abonos para miembros grupales', () => {
+  const cheques = [1, 2].map((id) => ({
+    ...structuredClone(fixtures.individualWithLoanPayment[1]),
+    ID: 19000 + id,
+    NombreEnCheque: `MIEMBRO ${id}`,
+  }));
+  const result = normalize([...cheques, structuredClone(fixtures.individualWithLoanPayment[0])]);
+
+  assert.equal(result.reason, 'GROUPED_LOAN_PAYMENT_ASSOCIATION_UNCONFIRMED');
+  assert.ok(result.miembros.every((item) => item.calculado === false && item.montoAprobado === null));
+});
+
+test('identifica datos incompletos de un miembro grupal', () => {
+  const cheques = [1, 2].map((id) => ({
+    ...structuredClone(fixtures.individualWithLoanPayment[1]),
+    ID: 19000 + id,
+    NombreEnCheque: id === 1 ? 'MIEMBRO 1' : '',
+  }));
+  const result = normalize(cheques);
+
+  assert.equal(result.supported, false);
+  assert.equal(result.reason, 'GROUPED_MEMBER_DATA_INVALID');
+  assert.equal(result.miembros[0].calculado, true);
+  assert.equal(result.miembros[1].calculado, false);
 });
 
 test('rechaza elementos que no son objetos', () => {

@@ -25,6 +25,9 @@ function validRequest(overrides = {}) {
     montoCanceladoCentavos: 250_000,
     descuentosCentavos: 50_000,
     montoChequeCentavos: 900_000,
+    miembroId: null,
+    cantidadMiembros: null,
+    grupoFingerprint: null,
     ...overrides,
   };
   const submissionToken = createSubmissionToken(user.id, values.numeroSolicitud, {
@@ -34,10 +37,14 @@ function validRequest(overrides = {}) {
     montoCancelado: values.montoCanceladoCentavos / 100,
     descuentos: values.descuentosCentavos / 100,
     montoCheque: values.montoChequeCentavos / 100,
+    miembroId: values.miembroId,
+    cantidadMiembros: values.cantidadMiembros,
+    grupoFingerprint: values.grupoFingerprint,
   }, { now: () => now });
   return {
     numeroSolicitud: values.numeroSolicitud,
     numeroCheque: values.numeroCheque,
+    ...(values.miembroId ? { miembroId: values.miembroId } : {}),
     submissionToken,
   };
 }
@@ -145,10 +152,36 @@ test('acepta montos coherentes y metodologia INDIVIDUAL', () => {
   assert.equal(requests[0].metodologia, 'INDIVIDUAL');
 });
 
-test('rechaza metodologia GRUPAL sin calculo confirmado', () => {
+test('acepta todos los miembros de un grupo calculado e identificado', () => {
+  const requests = validateSubmission(submission(
+    validRequest({ metodologia: 'GRUPAL', miembroId: '19536', cantidadMiembros: 2, grupoFingerprint: 'a'.repeat(43) }),
+    validRequest({ metodologia: 'GRUPAL', miembroId: '19537', cantidadMiembros: 2, grupoFingerprint: 'a'.repeat(43), numeroCheque: 'CHK-101' }),
+  ), { userId: user.id, now });
+  assert.deepEqual(requests.map((item) => item.miembroId), ['19536', '19537']);
+});
+
+test('rechaza un grupo incompleto y una identidad de miembro manipulada', () => {
+  const request = validRequest({ metodologia: 'GRUPAL', miembroId: '19536', cantidadMiembros: 2, grupoFingerprint: 'a'.repeat(43) });
   assert.throws(
-    () => validateSubmission(submission(validRequest({ metodologia: 'GRUPAL' })), { userId: user.id, now }),
-    (error) => error.code === 'UNSUPPORTED_METHODOLOGY' && error.status === 422,
+    () => validateSubmission(submission(request), { userId: user.id, now }),
+    (error) => error.code === 'INCOMPLETE_GROUP_SUBMISSION' && error.status === 422,
+  );
+  assert.throws(
+    () => validateSubmission(submission(
+      { ...request, miembroId: 'ALTERADO' },
+      validRequest({ metodologia: 'GRUPAL', miembroId: '19537', cantidadMiembros: 2, grupoFingerprint: 'a'.repeat(43), numeroCheque: 'CHK-101' }),
+    ), { userId: user.id, now }),
+    (error) => error.code === 'INVALID_SUBMISSION_TOKEN',
+  );
+});
+
+test('rechaza mezclar miembros firmados desde snapshots grupales distintos', () => {
+  assert.throws(
+    () => validateSubmission(submission(
+      validRequest({ metodologia: 'GRUPAL', miembroId: '19536', cantidadMiembros: 2, grupoFingerprint: 'a'.repeat(43) }),
+      validRequest({ metodologia: 'GRUPAL', miembroId: '19537', cantidadMiembros: 2, grupoFingerprint: 'b'.repeat(43), numeroCheque: 'CHK-101' }),
+    ), { userId: user.id, now }),
+    (error) => error.code === 'INCOMPLETE_GROUP_SUBMISSION',
   );
 });
 

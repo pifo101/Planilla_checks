@@ -23,10 +23,26 @@ function signature(encodedPayload, secret = config.sessionSecret) {
   return crypto.createHmac('sha256', secret).update(encodedPayload).digest('base64url');
 }
 
+function createGroupFingerprint(memberIds, fechaExtraccion) {
+  if (!Array.isArray(memberIds) || memberIds.length < 2) {
+    throw new SubmissionTokenError('Snapshot grupal invalido.');
+  }
+  const extractionTime = fechaExtraccion instanceof Date
+    ? fechaExtraccion.toISOString()
+    : String(fechaExtraccion || '');
+  const identities = memberIds.map((value) => String(value || '').trim()).sort();
+  if (!extractionTime || identities.some((value) => !value)) {
+    throw new SubmissionTokenError('Snapshot grupal invalido.');
+  }
+  return crypto.createHash('sha256')
+    .update(JSON.stringify({ extractionTime, identities }))
+    .digest('base64url');
+}
+
 function createSubmissionToken(userId, numeroSolicitud, distribution, options = {}) {
   const now = options.now ? options.now() : new Date();
   const payload = {
-    version: 1,
+    version: distribution.metodologia === 'GRUPAL' ? 2 : 1,
     userId,
     expiresAt: now.getTime() + TOKEN_TTL_MS,
     numeroSolicitud,
@@ -37,6 +53,16 @@ function createSubmissionToken(userId, numeroSolicitud, distribution, options = 
     descuentosCentavos: toCents(distribution.descuentos),
     montoChequeCentavos: toCents(distribution.montoCheque),
   };
+  if (payload.version === 2) {
+    payload.miembroId = String(distribution.miembroId || '').trim();
+    payload.cantidadMiembros = distribution.cantidadMiembros;
+    payload.grupoFingerprint = String(distribution.grupoFingerprint || '').trim();
+    if (!payload.miembroId || payload.miembroId.length > 100
+        || !Number.isSafeInteger(payload.cantidadMiembros) || payload.cantidadMiembros < 2
+        || !/^[A-Za-z0-9_-]{43}$/.test(payload.grupoFingerprint)) {
+      throw new SubmissionTokenError('Identidad grupal invalida para el envio.');
+    }
+  }
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
   return `${encodedPayload}.${signature(encodedPayload, options.secret)}`;
 }
@@ -65,7 +91,7 @@ function verifySubmissionToken(token, userId, options = {}) {
     throw new SubmissionTokenError('Token de solicitud invalido.');
   }
   const now = options.now ? options.now() : new Date();
-  if (payload.version !== 1 || payload.userId !== userId
+  if (![1, 2].includes(payload.version) || payload.userId !== userId
       || !Number.isSafeInteger(payload.expiresAt) || payload.expiresAt < now.getTime()) {
     throw new SubmissionTokenError('El token de la solicitud vencio o no pertenece al usuario autenticado.');
   }
@@ -76,5 +102,6 @@ module.exports = {
   SubmissionTokenError,
   TOKEN_TTL_MS,
   createSubmissionToken,
+  createGroupFingerprint,
   verifySubmissionToken,
 };

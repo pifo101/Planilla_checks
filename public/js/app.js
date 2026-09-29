@@ -22,7 +22,11 @@ if (solicitudForm) {
   const maxDraftRequests = 100;
   const loadButton = solicitudForm.querySelector('[data-fetch-distribution]');
   const addButton = solicitudForm.querySelector('[data-add-to-draft]');
+  const addGroupButton = solicitudForm.querySelector('[data-add-group-to-draft]');
   const checkNumberInput = solicitudForm.elements.numeroCheque;
+  const individualSection = solicitudForm.querySelector('[data-individual-request]');
+  const groupedSection = solicitudForm.querySelector('[data-grouped-request]');
+  const groupedMembers = solicitudForm.querySelector('[data-group-members]');
   const feedback = solicitudForm.querySelector('[data-request-feedback]');
   const draftBody = document.querySelector('[data-draft-body]');
   const draftCount = document.querySelector('[data-draft-count]');
@@ -71,7 +75,13 @@ if (solicitudForm) {
   }
 
   function validCheckNumber(value) {
-    return value !== '' && checkNumberInput.validity.valid;
+    return value !== '' && /^(?:[A-Za-z0-9]|-){1,50}$/.test(value);
+  }
+
+  function currentCheckInputs() {
+    return currentRequest?.metodologia === 'GRUPAL'
+      ? [...groupedMembers.querySelectorAll('[data-member-check]')]
+      : [checkNumberInput];
   }
 
   function updateAddButton() {
@@ -81,12 +91,60 @@ if (solicitudForm) {
       || !currentRequest
       || !currentRequest.supported
       || !validCheckNumber(checkNumber);
+    if (addGroupButton) {
+      const checks = currentCheckInputs().map((input) => input.value.trim());
+      addGroupButton.disabled = checkingAvailability
+        || sendingPlanilla
+        || currentRequest?.metodologia !== 'GRUPAL'
+        || !currentRequest.supported
+        || checks.length === 0
+        || checks.some((value) => !validCheckNumber(value));
+    }
+  }
+
+  function renderGroupedRequest(data, requestNumber) {
+    individualSection.classList.add('d-none');
+    groupedSection.classList.remove('d-none');
+    groupedSection.querySelector('[data-group-request-number]').textContent = requestNumber;
+    groupedSection.querySelector('[data-group-count]').textContent = `${data.miembros.length} miembros`;
+    groupedMembers.innerHTML = data.miembros.map((miembro, index) => {
+      const amount = (value) => miembro.calculado ? currency.format(value) : 'No confirmado';
+      const disabled = miembro.calculado ? '' : 'disabled';
+      return `
+        <section class="card mb-3" data-group-member="${escapeHtml(miembro.miembroId)}">
+          <div class="card-header bg-white p-4 pb-0 border-0 d-flex justify-content-between align-items-center">
+            <h3 class="h5 mb-0">Informacion de la solicitud</h3>
+            <span class="badge ${miembro.calculado ? 'text-bg-success' : 'text-bg-warning'}">Miembro ${index + 1} de ${data.miembros.length}</span>
+          </div>
+          <div class="card-body p-4">
+            <div class="row g-3">
+              <div class="col-md-6"><label class="form-label">Cliente</label><input class="form-control readonly-field" value="${escapeHtml(miembro.cliente || '')}" readonly></div>
+              <div class="col-md-3"><label class="form-label">Monto aprobado</label><input class="form-control readonly-field" value="${escapeHtml(amount(miembro.montoAprobado))}" readonly></div>
+              <div class="col-md-3"><label class="form-label">Monto cancelado</label><input class="form-control readonly-field" value="${escapeHtml(amount(miembro.montoCancelado))}" readonly></div>
+              <div class="col-md-3"><label class="form-label">Descuentos</label><input class="form-control readonly-field" value="${escapeHtml(amount(miembro.descuentos))}" readonly></div>
+              <div class="col-md-3"><label class="form-label">Monto cheque</label><input class="form-control readonly-field" value="${escapeHtml(amount(miembro.montoCheque))}" readonly></div>
+              <div class="col-md-3"><label class="form-label">Fecha y hora</label><input class="form-control readonly-field" value="${escapeHtml(new Date(data.fechaExtraccion).toLocaleString('es-GT'))}" readonly></div>
+              <div class="col-md-3"><label class="form-label">Metodologia</label><input class="form-control readonly-field" value="GRUPAL" readonly></div>
+              <div class="col-md-6"><label class="form-label">Agencia</label><input class="form-control readonly-field" value="${escapeHtml(data.agencia || 'Sin agencia asignada')}" readonly></div>
+              <div class="col-md-6"><label class="form-label fw-semibold" for="numeroCheque-${index}">Numero de cheque</label><input class="form-control" id="numeroCheque-${index}" data-member-check data-member-index="${index}" type="text" placeholder="Ingresa el numero de cheque" pattern="(?:[A-Za-z0-9]|-){1,50}" maxlength="50" autocomplete="off" ${disabled}></div>
+            </div>
+            <div class="form-text mt-3">Estado: ${miembro.calculado ? 'calculo financiero confirmado' : 'calculo financiero no confirmado'}.</div>
+          </div>
+        </section>`;
+    }).join('');
+  }
+
+  function clearGroupedRequest() {
+    groupedMembers.innerHTML = '';
+    groupedSection.classList.add('d-none');
+    individualSection.classList.remove('d-none');
   }
 
   function clearCurrentRequest({ clearRequestNumber = true } = {}) {
     currentRequest = null;
     if (clearRequestNumber) solicitudForm.elements.numeroSolicitud.value = '';
     clearRequestData();
+    clearGroupedRequest();
     updateAddButton();
   }
 
@@ -172,14 +230,31 @@ if (solicitudForm) {
       if (!distributionRequests.isCurrent(request)) return;
 
       if (!response.ok || !payload?.success) {
+        if (payload?.data?.miembros?.length) {
+          renderGroupedRequest({
+            ...payload.data,
+            fechaExtraccion: new Date().toISOString(),
+            agencia: '',
+          }, requestNumber);
+        }
         if (payload?.data?.metodologia) {
           solicitudForm.elements.metodologia.value = payload.data.metodologia;
         }
         throw new Error(payload?.error?.message || 'No fue posible obtener la informacion de la solicitud.');
       }
 
-      setData(payload.data);
-      currentRequest = {
+      if (payload.data.metodologia === 'GRUPAL') {
+        renderGroupedRequest(payload.data, requestNumber);
+        currentRequest = {
+          numeroSolicitud: requestNumber,
+          metodologia: 'GRUPAL',
+          fechaExtraccion: payload.data.fechaExtraccion,
+          miembros: payload.data.miembros,
+          supported: payload.data.supported === true,
+        };
+      } else {
+        setData(payload.data);
+        currentRequest = {
         numeroSolicitud: requestNumber,
         cliente: payload.data.cliente,
         montoAprobado: payload.data.montoAprobado,
@@ -192,7 +267,8 @@ if (solicitudForm) {
         ordenPago: payload.data.ordenPago,
         submissionToken: payload.data.submissionToken,
         supported: payload.data.supported === true,
-      };
+        };
+      }
       updateAddButton();
       const warningMessage = payload.data.warnings?.join(' ');
       showFeedback(warningMessage || 'Datos obtenidos correctamente. Revisa la informacion antes de continuar.', warningMessage ? 'warning' : 'success');
@@ -214,22 +290,24 @@ if (solicitudForm) {
     loadButton.disabled = false;
     updateAddButton();
   });
+  groupedMembers.addEventListener('input', updateAddButton);
   solicitudForm.elements.numeroSolicitud.addEventListener('input', () => {
     const hadPendingRequest = distributionRequests.hasActive();
     const changedLoadedRequest = currentRequest
       && solicitudForm.elements.numeroSolicitud.value.trim() !== currentRequest.numeroSolicitud;
+    const hasDisplayedGroup = !groupedSection.classList.contains('d-none');
     distributionRequests.cancel();
     availabilityRequests.cancel();
     checkingAvailability = false;
     loadButton.disabled = false;
     loadButton.innerHTML = '<i class="bi bi-search me-2"></i>Obtener datos';
-    if (hadPendingRequest || changedLoadedRequest) {
+    if (hadPendingRequest || changedLoadedRequest || hasDisplayedGroup) {
       clearCurrentRequest({ clearRequestNumber: false });
       showFeedback('El numero de solicitud cambio. Pulsa Obtener datos para consultar nuevamente.', 'info');
     }
   });
 
-  addButton.addEventListener('click', async () => {
+  async function addCurrentRequest() {
     if (sendingPlanilla) return;
     if (!currentRequest || !currentRequest.supported) {
       showFeedback('Consulta nuevamente una solicitud soportada antes de agregarla.', 'warning');
@@ -237,37 +315,44 @@ if (solicitudForm) {
       return;
     }
 
-    const numeroCheque = solicitudForm.elements.numeroCheque.value.trim();
     const requestToAdd = currentRequest;
-    if (!validCheckNumber(numeroCheque)) {
+    const inputs = currentCheckInputs();
+    const checkNumbersToAdd = inputs.map((input) => input.value.trim());
+    if (checkNumbersToAdd.some((numeroCheque) => !validCheckNumber(numeroCheque))) {
       showFeedback('Ingresa un numero de cheque valido de hasta 50 caracteres alfanumericos o guiones.', 'warning');
-      solicitudForm.elements.numeroCheque.focus();
+      inputs.find((input) => !validCheckNumber(input.value.trim()))?.focus();
       return;
     }
     if (draftRequests.some((item) => item.numeroSolicitud === requestToAdd.numeroSolicitud)) {
       showFeedback('Esta solicitud ya fue agregada al borrador.', 'warning');
       return;
     }
-    if (draftRequests.some((item) => item.numeroCheque.toUpperCase() === numeroCheque.toUpperCase())) {
+    const normalizedChecks = checkNumbersToAdd.map((value) => value.toUpperCase());
+    if (new Set(normalizedChecks).size !== normalizedChecks.length
+        || draftRequests.some((item) => normalizedChecks.includes(item.numeroCheque.toUpperCase()))) {
       showFeedback('Este numero de cheque ya fue agregado al borrador.', 'warning');
       return;
     }
-    if (draftRequests.length >= maxDraftRequests) {
+    if (draftRequests.length + checkNumbersToAdd.length > maxDraftRequests) {
       showFeedback(`El borrador admite como maximo ${maxDraftRequests} solicitudes por envio.`, 'warning');
       return;
     }
 
-    const amounts = {
-      montoAprobado: toCents(requestToAdd.montoAprobado),
-      montoCancelado: toCents(requestToAdd.montoCancelado),
-      descuentos: toCents(requestToAdd.descuentos),
-      montoCheque: toCents(requestToAdd.montoCheque),
-    };
-    if (Object.values(amounts).some((value) => value === null)) {
+    const requestsToAdd = requestToAdd.metodologia === 'GRUPAL'
+      ? requestToAdd.miembros.map((miembro, index) => ({ ...miembro, numeroCheque: checkNumbersToAdd[index] }))
+      : [{ ...requestToAdd, numeroCheque: checkNumbersToAdd[0] }];
+    const normalizedRequests = requestsToAdd.map((item) => ({
+      ...item,
+      montoAprobado: toCents(item.montoAprobado),
+      montoCancelado: toCents(item.montoCancelado),
+      descuentos: toCents(item.descuentos),
+      montoCheque: toCents(item.montoCheque),
+    }));
+    if (normalizedRequests.some((item) => [item.montoAprobado, item.montoCancelado, item.descuentos, item.montoCheque].includes(null))) {
       showFeedback('La solicitud contiene datos monetarios invalidos y no puede agregarse.', 'danger');
       return;
     }
-    if (amounts.montoAprobado !== amounts.montoCancelado + amounts.descuentos + amounts.montoCheque) {
+    if (normalizedRequests.some((item) => item.montoAprobado !== item.montoCancelado + item.descuentos + item.montoCheque)) {
       showFeedback('Los montos de la solicitud no son consistentes y no puede agregarse.', 'danger');
       return;
     }
@@ -277,49 +362,46 @@ if (solicitudForm) {
     loadButton.disabled = true;
     const availabilityRequest = availabilityRequests.start();
     try {
-      const response = await fetch(`/api/solicitudes/${encodeURIComponent(requestToAdd.numeroSolicitud)}/disponibilidad?numeroCheque=${encodeURIComponent(numeroCheque)}`, {
-        headers: { accept: 'application/json' },
-        signal: availabilityRequest.signal,
-      });
-      const payload = await response.json().catch(() => null);
+      const responses = await Promise.all(checkNumbersToAdd.map((numeroCheque) => fetch(`/api/solicitudes/${encodeURIComponent(requestToAdd.numeroSolicitud)}/disponibilidad?numeroCheque=${encodeURIComponent(numeroCheque)}`, {
+        headers: { accept: 'application/json' }, signal: availabilityRequest.signal,
+      })));
+      const payloads = await Promise.all(responses.map((response) => response.json().catch(() => null)));
       if (!availabilityRequests.isCurrent(availabilityRequest)) return;
-      if (!response.ok || !payload?.success) {
-        throw new Error(payload?.error?.message || 'No fue posible comprobar la disponibilidad.');
+      const failedIndex = responses.findIndex((response, index) => !response.ok || !payloads[index]?.success);
+      if (failedIndex >= 0) {
+        throw new Error(payloads[failedIndex]?.error?.message || 'No fue posible comprobar la disponibilidad.');
       }
       if (
         currentRequest !== requestToAdd
         || solicitudForm.elements.numeroSolicitud.value.trim() !== requestToAdd.numeroSolicitud
-        || solicitudForm.elements.numeroCheque.value.trim() !== numeroCheque
+        || currentCheckInputs().some((input, index) => input.value.trim() !== checkNumbersToAdd[index])
       ) {
         showFeedback('La consulta o el numero de cheque cambio. Revisa los datos antes de agregar.', 'warning');
         return;
       }
-      if (!payload.data.solicitudDisponible) {
+      if (payloads.some((payload) => !payload.data.solicitudDisponible)) {
         showFeedback('Esta solicitud ya fue utilizada en una planilla anterior.', 'warning');
         return;
       }
-      if (!payload.data.chequeDisponible) {
+      if (payloads.some((payload) => !payload.data.chequeDisponible)) {
         showFeedback('Este numero de cheque ya fue utilizado en una planilla anterior.', 'warning');
         return;
       }
 
       const draftApprovedTotal = draftRequests.reduce((total, item) => total + item.montoAprobado, 0);
-      if (!Number.isSafeInteger(draftApprovedTotal + amounts.montoAprobado)) {
+      const addedApprovedTotal = normalizedRequests.reduce((total, item) => total + item.montoAprobado, 0);
+      if (!Number.isSafeInteger(addedApprovedTotal)
+          || !Number.isSafeInteger(draftApprovedTotal + addedApprovedTotal)) {
         showFeedback('El total del borrador excede el monto maximo permitido.', 'danger');
         return;
       }
 
-      draftRequests.push({
-        ...amounts,
+      draftRequests.push(...normalizedRequests.map((item) => ({
+        ...item,
         numeroSolicitud: requestToAdd.numeroSolicitud,
-        cliente: requestToAdd.cliente,
-        numeroCheque,
         metodologia: requestToAdd.metodologia,
         fechaExtraccion: requestToAdd.fechaExtraccion,
-        numeroCredito: requestToAdd.numeroCredito,
-        ordenPago: requestToAdd.ordenPago,
-        submissionToken: requestToAdd.submissionToken,
-      });
+      })));
       renderDraft();
       clearCurrentRequest();
       showFeedback('Solicitud agregada al borrador. Envia la planilla para guardarla.', 'success');
@@ -335,14 +417,30 @@ if (solicitudForm) {
         updateAddButton();
       }
     }
+  }
+  addButton.addEventListener('click', addCurrentRequest);
+  addGroupButton.addEventListener('click', addCurrentRequest);
+  solicitudForm.querySelector('[data-clear-group]').addEventListener('click', () => {
+    clearCurrentRequest();
+    feedback.textContent = '';
+    feedback.className = 'alert d-none mt-3 mb-0';
   });
 
   draftBody.addEventListener('click', (event) => {
     const removeButton = event.target.closest('[data-remove-draft]');
     if (!removeButton || sendingPlanilla) return;
-    draftRequests.splice(Number(removeButton.dataset.removeDraft), 1);
+    const selected = draftRequests[Number(removeButton.dataset.removeDraft)];
+    if (selected?.metodologia === 'GRUPAL') {
+      for (let index = draftRequests.length - 1; index >= 0; index -= 1) {
+        if (draftRequests[index].numeroSolicitud === selected.numeroSolicitud) draftRequests.splice(index, 1);
+      }
+    } else {
+      draftRequests.splice(Number(removeButton.dataset.removeDraft), 1);
+    }
     renderDraft();
-    showFeedback('Solicitud eliminada del borrador.', 'info');
+    showFeedback(selected?.metodologia === 'GRUPAL'
+      ? 'Grupo eliminado del borrador.'
+      : 'Solicitud eliminada del borrador.', 'info');
   });
 
   sendButton.addEventListener('click', async () => {
@@ -377,6 +475,7 @@ if (solicitudForm) {
     checkingAvailability = false;
     solicitudForm.reset();
     currentRequest = null;
+    clearGroupedRequest();
     loadButton.disabled = false;
     loadButton.innerHTML = '<i class="bi bi-search me-2"></i>Obtener datos';
     feedback.textContent = '';

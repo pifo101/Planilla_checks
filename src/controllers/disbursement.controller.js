@@ -1,6 +1,6 @@
 const { DisbursementError } = require('../services/disbursement.service');
 const { getDistribucionDesembolso } = require('../services/webservice.service');
-const { createSubmissionToken } = require('../services/planilla-token.service');
+const { createGroupFingerprint, createSubmissionToken } = require('../services/planilla-token.service');
 
 const ERROR_MESSAGES = {
   INVALID_REQUEST_NUMBER: 'Ingresa un numero de solicitud valido.',
@@ -13,6 +13,9 @@ const ERROR_MESSAGES = {
   NON_FINAL_DISTRIBUTION: 'La solicitud contiene operaciones que todavia no estan finalizadas.',
   MULTIPLE_CLIENT_NAMES: 'La respuesta contiene nombres de cliente diferentes.',
   GROUPED_AMOUNT_CALCULATION_UNCONFIRMED: 'La solicitud es grupal y su calculo esta pendiente de confirmacion.',
+  GROUPED_MEMBER_IDENTITY_UNCONFIRMED: 'No fue posible identificar de forma unica a todos los miembros del grupo.',
+  GROUPED_MEMBER_DATA_INVALID: 'La informacion de uno o mas miembros del grupo esta incompleta.',
+  GROUPED_LOAN_PAYMENT_ASSOCIATION_UNCONFIRMED: 'La solicitud grupal contiene abonos cuya relacion con los miembros no esta confirmada.',
   UNSUPPORTED_DISTRIBUTION: 'La distribucion recibida todavia no esta soportada.',
 };
 
@@ -30,19 +33,42 @@ async function getDistribution(req, res) {
         data: {
           cantidadCheques: data.cantidadCheques,
           metodologia: data.metodologia,
+          miembros: data.miembros || [],
           warnings: data.warnings,
         },
       });
     }
 
+    const responseData = {
+      ...data,
+      agenciaId: req.session.user.agenciaId || null,
+      agencia: req.session.user.agenciaNombre || null,
+    };
+    if (data.metodologia === 'GRUPAL') {
+      const grupoFingerprint = createGroupFingerprint(
+        data.miembros.map((miembro) => miembro.miembroId),
+        data.fechaExtraccion,
+      );
+      responseData.miembros = data.miembros.map((miembro) => ({
+        ...miembro,
+        submissionToken: createSubmissionToken(
+          req.session.user.id,
+          req.params.numeroSolicitud,
+          {
+            ...miembro,
+            metodologia: 'GRUPAL',
+            cantidadMiembros: data.miembros.length,
+            grupoFingerprint,
+          },
+        ),
+      }));
+    } else {
+      responseData.submissionToken = createSubmissionToken(req.session.user.id, req.params.numeroSolicitud, data);
+    }
+
     return res.json({
       success: true,
-      data: {
-        ...data,
-        submissionToken: createSubmissionToken(req.session.user.id, req.params.numeroSolicitud, data),
-        agenciaId: req.session.user.agenciaId || null,
-        agencia: req.session.user.agenciaNombre || null,
-      },
+      data: responseData,
     });
   } catch (error) {
     if (error instanceof DisbursementError) {

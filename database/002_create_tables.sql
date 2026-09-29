@@ -63,6 +63,7 @@ BEGIN
         id BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT PK_solicitudes_planilla PRIMARY KEY,
         planilla_id BIGINT NOT NULL,
         numero_solicitud NVARCHAR(50) NOT NULL,
+        miembro_id NVARCHAR(100) NULL,
         nombre_cliente NVARCHAR(200) NOT NULL,
         monto_aprobado DECIMAL(18, 2) NOT NULL,
         monto_cancelado DECIMAL(18, 2) NOT NULL CONSTRAINT DF_solicitudes_monto_cancelado DEFAULT (0),
@@ -76,7 +77,7 @@ BEGIN
         fecha_procesado DATETIME2(0) NULL,
         created_at DATETIME2(0) NOT NULL CONSTRAINT DF_solicitudes_created_at DEFAULT (SYSUTCDATETIME()),
         updated_at DATETIME2(0) NOT NULL CONSTRAINT DF_solicitudes_updated_at DEFAULT (SYSUTCDATETIME()),
-        CONSTRAINT UQ_solicitudes_numero_solicitud UNIQUE (numero_solicitud),
+        CONSTRAINT UQ_solicitudes_numero_solicitud_miembro UNIQUE (numero_solicitud, miembro_id),
         CONSTRAINT UQ_solicitudes_numero_cheque UNIQUE (numero_cheque),
         CONSTRAINT CK_solicitudes_montos CHECK (
             monto_aprobado >= 0 AND monto_cancelado >= 0 AND descuentos >= 0 AND monto_cheque >= 0

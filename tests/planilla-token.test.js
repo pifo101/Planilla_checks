@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   SubmissionTokenError,
   TOKEN_TTL_MS,
+  createGroupFingerprint,
   createSubmissionToken,
   verifySubmissionToken,
 } = require('../src/services/planilla-token.service');
@@ -40,4 +41,21 @@ test('rechaza firma alterada, usuario distinto y token vencido', () => {
   ]) {
     assert.throws(action, SubmissionTokenError);
   }
+});
+
+test('protege identidad y cantidad de miembros en snapshots grupales', () => {
+  const grupoFingerprint = createGroupFingerprint(['19536', '19537'], now);
+  const token = createSubmissionToken(10, '123456', {
+    ...distribution,
+    metodologia: 'GRUPAL',
+    miembroId: '19536',
+    cantidadMiembros: 5,
+    grupoFingerprint,
+  }, { now: () => now, secret: 'test-secret' });
+  const payload = verifySubmissionToken(token, 10, { now: () => now, secret: 'test-secret' });
+
+  assert.equal(payload.version, 2);
+  assert.equal(payload.miembroId, '19536');
+  assert.equal(payload.cantidadMiembros, 5);
+  assert.equal(payload.grupoFingerprint, grupoFingerprint);
 });

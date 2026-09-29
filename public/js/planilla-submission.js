@@ -7,6 +7,7 @@
     return {
       solicitudes: draftRequests.map((item) => ({
         numeroSolicitud: item.numeroSolicitud,
+        ...(item.miembroId ? { miembroId: item.miembroId } : {}),
         numeroCheque: item.numeroCheque,
         submissionToken: item.submissionToken,
       })),
