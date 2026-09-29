@@ -1,8 +1,4 @@
-const sentPlanillas = [
-  { id: 'PLN-1042', agency: 'Central', date: '22/09/2026 09:35', requests: 4, approved: 42500, status: 'ENVIADA' },
-  { id: 'PLN-1039', agency: 'Central', date: '21/09/2026 15:12', requests: 3, approved: 28750, status: 'RECIBIDA' },
-  { id: 'PLN-1032', agency: 'Central', date: '18/09/2026 11:08', requests: 5, approved: 61900, status: 'PROCESADA' },
-];
+const planillaService = require('../services/planilla.service');
 
 function showNewPlanilla(req, res) {
   res.render('assistant/new-planilla', {
@@ -10,25 +6,53 @@ function showNewPlanilla(req, res) {
   });
 }
 
-function listSentPlanillas(req, res) {
-  res.render('assistant/sent-planillas', {
-    pageTitle: 'Planillas enviadas',
-    planillas: sentPlanillas,
-    selectedDate: req.query.fecha || '',
+function renderHistoryError(error, res) {
+  if (error instanceof planillaService.PlanillaError) {
+    const errorView = error.status === 403 || error.status >= 500 ? '500' : '404';
+    return res.status(error.status).render(errorView, {
+      pageTitle: error.status === 403 ? 'Acceso denegado' : 'Consulta no valida',
+      errorMessage: error.message,
+      errorCode: error.status,
+    });
+  }
+  console.error(error);
+  return res.status(500).render('500', {
+    pageTitle: 'Error del servidor',
+    errorMessage: 'No fue posible consultar las planillas en este momento.',
   });
 }
 
-function showSentPlanilla(req, res) {
-  const planilla = sentPlanillas.find((item) => item.id === req.params.id);
-
-  if (!planilla) {
-    return res.status(404).render('404', { pageTitle: 'Planilla no encontrada' });
+async function listSentPlanillas(req, res) {
+  try {
+    const history = await planillaService.listSentPlanillas(req.session.user, req.query);
+    res.set('Cache-Control', 'no-store');
+    return res.render('assistant/sent-planillas', {
+      pageTitle: 'Planillas enviadas',
+      ...history,
+    });
+  } catch (error) {
+    return renderHistoryError(error, res);
   }
+}
 
-  return res.render('assistant/planilla-detail', {
-    pageTitle: `Planilla ${planilla.id}`,
-    planilla,
-  });
+async function showSentPlanilla(req, res) {
+  try {
+    const planilla = await planillaService.getSentPlanillaDetail(req.session.user, req.params.id);
+    if (!planilla) {
+      return res.status(404).render('404', {
+        pageTitle: 'Planilla no encontrada',
+        errorMessage: 'La planilla no existe o no pertenece a tu agencia.',
+        errorCode: 404,
+      });
+    }
+    res.set('Cache-Control', 'no-store');
+    return res.render('assistant/planilla-detail', {
+      pageTitle: `Planilla ${planilla.codigo}`,
+      planilla,
+    });
+  } catch (error) {
+    return renderHistoryError(error, res);
+  }
 }
 
 module.exports = {

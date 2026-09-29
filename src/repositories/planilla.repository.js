@@ -83,59 +83,88 @@ async function createWithSolicitudes(planilla, solicitudes) {
   }
 }
 
-async function findByDate(fecha) {
+async function findSentByAgencyAndDate(agenciaId, startDate, endDate, page, pageSize) {
   const pool = await getPool();
-  const result = await pool.request()
-    .input('fecha', sql.Date, fecha)
-    .query(`
-      SELECT p.id, p.codigo, p.fecha_creacion AS fechaCreacion,
-             p.fecha_envio AS fechaEnvio, p.estado, a.id AS agenciaId, a.nombre AS agenciaNombre
-      FROM dbo.planillas AS p
-      INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
-      WHERE p.fecha_creacion >= @fecha
-        AND p.fecha_creacion < DATEADD(DAY, 1, @fecha)
-      ORDER BY p.fecha_creacion DESC;
-    `);
-
-  return result.recordset;
-}
-
-async function findByAgency(agenciaId) {
-  const pool = await getPool();
-  const result = await pool.request()
+  const offset = (page - 1) * pageSize;
+  const countResult = await pool.request()
     .input('agenciaId', sql.Int, agenciaId)
+    .input('startDate', sql.DateTime2(0), startDate)
+    .input('endDate', sql.DateTime2(0), endDate)
     .query(`
-      SELECT p.id, p.codigo, p.fecha_creacion AS fechaCreacion,
-             p.fecha_envio AS fechaEnvio, p.estado
+      SELECT COUNT(*) AS total
       FROM dbo.planillas AS p
       WHERE p.agencia_id = @agenciaId
-      ORDER BY p.fecha_creacion DESC;
+        AND p.fecha_envio >= @startDate
+        AND p.fecha_envio < @endDate;
+    `);
+  const total = Number(countResult.recordset[0].total);
+  if (offset >= total) return { total, planillas: [] };
+
+  const result = await pool.request()
+    .input('agenciaId', sql.Int, agenciaId)
+    .input('startDate', sql.DateTime2(0), startDate)
+    .input('endDate', sql.DateTime2(0), endDate)
+    .input('offset', sql.Int, offset)
+    .input('pageSize', sql.Int, pageSize)
+    .query(`
+      SELECT p.id, p.codigo, p.fecha_envio AS fechaEnvio, p.estado,
+             a.id AS agenciaId, a.nombre AS agenciaNombre,
+             COUNT(sp.id) AS cantidadRegistros,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_aprobado), CONVERT(DECIMAL(18, 2), 0))) AS totalAprobado,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cancelado), CONVERT(DECIMAL(18, 2), 0))) AS totalCancelado,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.descuentos), CONVERT(DECIMAL(18, 2), 0))) AS totalDescuentos,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cheque), CONVERT(DECIMAL(18, 2), 0))) AS totalMontoCheque
+      FROM dbo.planillas AS p
+      INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
+      LEFT JOIN dbo.solicitudes_planilla AS sp ON sp.planilla_id = p.id
+      WHERE p.agencia_id = @agenciaId
+        AND p.fecha_envio >= @startDate
+        AND p.fecha_envio < @endDate
+      GROUP BY p.id, p.codigo, p.fecha_envio, p.estado, a.id, a.nombre
+      ORDER BY p.fecha_envio DESC, p.id DESC
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
     `);
 
-  return result.recordset;
+  return {
+    total,
+    planillas: result.recordset,
+  };
 }
 
-async function findDetail(id) {
+async function findDetailForAgency(id, agenciaId) {
   const pool = await getPool();
-  const request = pool.request().input('id', sql.BigInt, id);
+  const request = pool.request()
+    .input('id', sql.BigInt, id)
+    .input('agenciaId', sql.Int, agenciaId);
   const result = await request.query(`
     SELECT p.id, p.codigo, p.fecha_creacion AS fechaCreacion, p.fecha_envio AS fechaEnvio,
            p.estado, p.numero_acta AS numeroActa, a.id AS agenciaId, a.nombre AS agenciaNombre,
-           u.id AS usuarioId, u.nombre AS creadaPor
+           u.id AS usuarioId, u.nombre AS creadaPor,
+           COUNT(sp.id) AS cantidadRegistros,
+           CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_aprobado), CONVERT(DECIMAL(18, 2), 0))) AS totalAprobado,
+           CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cancelado), CONVERT(DECIMAL(18, 2), 0))) AS totalCancelado,
+           CONVERT(VARCHAR(40), COALESCE(SUM(sp.descuentos), CONVERT(DECIMAL(18, 2), 0))) AS totalDescuentos,
+           CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cheque), CONVERT(DECIMAL(18, 2), 0))) AS totalMontoCheque
     FROM dbo.planillas AS p
     INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
     INNER JOIN dbo.usuarios AS u ON u.id = p.creada_por_usuario_id
-    WHERE p.id = @id;
+    LEFT JOIN dbo.solicitudes_planilla AS sp ON sp.planilla_id = p.id
+    WHERE p.id = @id AND p.agencia_id = @agenciaId AND p.fecha_envio IS NOT NULL
+    GROUP BY p.id, p.codigo, p.fecha_creacion, p.fecha_envio, p.estado,
+             p.numero_acta, a.id, a.nombre, u.id, u.nombre;
 
-    SELECT id, numero_solicitud AS numeroSolicitud, miembro_id AS miembroId,
-           nombre_cliente AS nombreCliente,
-           monto_aprobado AS montoAprobado, monto_cancelado AS montoCancelado,
-           descuentos, monto_cheque AS montoCheque, numero_cheque AS numeroCheque,
-           metodologia, fecha_extraccion AS fechaExtraccion, estado, procesado,
-           fecha_procesado AS fechaProcesado
-    FROM dbo.solicitudes_planilla
-    WHERE planilla_id = @id
-    ORDER BY id;
+    SELECT sp.id, sp.numero_solicitud AS numeroSolicitud, sp.miembro_id AS miembroId,
+           sp.nombre_cliente AS nombreCliente,
+           CONVERT(VARCHAR(40), sp.monto_aprobado) AS montoAprobado,
+           CONVERT(VARCHAR(40), sp.monto_cancelado) AS montoCancelado,
+           CONVERT(VARCHAR(40), sp.descuentos) AS descuentos,
+           CONVERT(VARCHAR(40), sp.monto_cheque) AS montoCheque, sp.numero_cheque AS numeroCheque,
+           sp.metodologia, sp.fecha_extraccion AS fechaExtraccion, sp.estado, sp.procesado,
+           sp.fecha_procesado AS fechaProcesado
+    FROM dbo.solicitudes_planilla AS sp
+    INNER JOIN dbo.planillas AS p ON p.id = sp.planilla_id
+    WHERE sp.planilla_id = @id AND p.agencia_id = @agenciaId AND p.fecha_envio IS NOT NULL
+    ORDER BY sp.id;
   `);
 
   if (!result.recordsets[0][0]) {
@@ -172,8 +201,7 @@ async function findSolicitudUsage(numeroSolicitud, numeroCheque) {
 
 module.exports = {
   createWithSolicitudes,
-  findByDate,
-  findByAgency,
-  findDetail,
+  findSentByAgencyAndDate,
+  findDetailForAgency,
   findSolicitudUsage,
 };

@@ -21,6 +21,7 @@ const suffix = `${Date.now()}${crypto.randomInt(1000, 9999)}`;
 const agencyCode = `TEST-${suffix}`.slice(0, 30);
 const alternateAgencyCode = `ALT-${suffix}`.slice(0, 30);
 const activeEmail = `active-${suffix}@example.test`;
+const alternateEmail = `alternate-${suffix}@example.test`;
 const inactiveEmail = `inactive-${suffix}@example.test`;
 const accountingEmail = `accounting-${suffix}@example.test`;
 const deletedEmail = `deleted-${suffix}@example.test`;
@@ -56,6 +57,7 @@ async function cleanup() {
     .input('agencyCode', sql.NVarChar(30), agencyCode)
     .input('alternateAgencyCode', sql.NVarChar(30), alternateAgencyCode)
     .input('activeEmail', sql.NVarChar(254), activeEmail)
+    .input('alternateEmail', sql.NVarChar(254), alternateEmail)
     .input('inactiveEmail', sql.NVarChar(254), inactiveEmail)
     .input('accountingEmail', sql.NVarChar(254), accountingEmail)
     .input('deletedEmail', sql.NVarChar(254), deletedEmail)
@@ -64,20 +66,20 @@ async function cleanup() {
       SET estado = 'BORRADOR', fecha_envio = NULL
       FROM dbo.planillas AS p
       INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
-      WHERE a.codigo = @agencyCode;
+       WHERE a.codigo IN (@agencyCode, @alternateAgencyCode);
 
       DELETE s
       FROM dbo.solicitudes_planilla AS s
       INNER JOIN dbo.planillas AS p ON p.id = s.planilla_id
       INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
-      WHERE a.codigo = @agencyCode;
+       WHERE a.codigo IN (@agencyCode, @alternateAgencyCode);
 
       DELETE p
       FROM dbo.planillas AS p
       INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
-      WHERE a.codigo = @agencyCode;
+       WHERE a.codigo IN (@agencyCode, @alternateAgencyCode);
 
-      DELETE FROM dbo.usuarios WHERE email IN (@activeEmail, @inactiveEmail, @accountingEmail, @deletedEmail);
+      DELETE FROM dbo.usuarios WHERE email IN (@activeEmail, @alternateEmail, @inactiveEmail, @accountingEmail, @deletedEmail);
       DELETE FROM dbo.agencias WHERE codigo IN (@agencyCode, @alternateAgencyCode);
     `);
 }
@@ -123,6 +125,13 @@ async function main() {
     passwordHash,
     rol: 'ASISTENTE',
     agenciaId,
+  });
+  const alternateUser = await userRepository.create({
+    nombre: 'Asistente alterno temporal',
+    email: alternateEmail,
+    passwordHash,
+    rol: 'ASISTENTE',
+    agenciaId: alternateAgencyId,
   });
   await userRepository.create({
     nombre: 'Usuario inactivo temporal',
@@ -238,6 +247,43 @@ async function main() {
     { generateCode: () => `PLN-G-${suffix}` },
   );
   assert.equal(groupedPlanilla.solicitudes.length, 2);
+  const alternatePlanilla = await planillaRepository.createWithSolicitudes({
+    codigo: `PLN-ALT-${suffix}`,
+    agenciaId: alternateAgencyId,
+    usuarioId: Number(alternateUser.id),
+    fechaEnvio: new Date(),
+    estado: 'ENVIADA',
+    numeroActa: null,
+  }, [{
+    ...repositorySolicitud,
+    numeroSolicitud: `4${suffix}`,
+    numeroCheque: `ALT-${suffix}`,
+  }]);
+  const historyDate = new Date().toISOString().slice(0, 10);
+  const historyStart = new Date(`${historyDate}T00:00:00.000Z`);
+  const historyEnd = new Date(historyStart.getTime() + (24 * 60 * 60 * 1000));
+  const agencyHistory = await planillaRepository.findSentByAgencyAndDate(
+    agenciaId,
+    historyStart,
+    historyEnd,
+    1,
+    20,
+  );
+  assert.ok(agencyHistory.planillas.some((item) => Number(item.id) === Number(createdPlanilla.id)));
+  assert.ok(agencyHistory.planillas.some((item) => Number(item.id) === Number(groupedPlanilla.id)));
+  assert.equal(agencyHistory.planillas.some((item) => Number(item.id) === Number(alternatePlanilla.id)), false);
+  const groupedSummary = agencyHistory.planillas.find((item) => Number(item.id) === Number(groupedPlanilla.id));
+  assert.equal(groupedSummary.cantidadRegistros, 2);
+  assert.equal(groupedSummary.totalAprobado, '4000.00');
+  assert.equal(groupedSummary.totalCancelado, '0.00');
+  assert.equal(groupedSummary.totalDescuentos, '200.00');
+  assert.equal(groupedSummary.totalMontoCheque, '3800.00');
+
+  const groupedDetail = await planillaRepository.findDetailForAgency(groupedPlanilla.id, agenciaId);
+  assert.deepEqual(groupedDetail.solicitudes.map((item) => item.miembroId), ['19536', '19537']);
+  assert.equal(groupedDetail.cantidadRegistros, 2);
+  assert.equal(groupedDetail.totalAprobado, '4000.00');
+  assert.equal(await planillaRepository.findDetailForAgency(alternatePlanilla.id, agenciaId), null);
   const groupedRows = await pool.request()
     .input('numeroSolicitud', sql.NVarChar(50), groupedRequestNumber)
     .query(`
@@ -339,6 +385,9 @@ async function main() {
   const withoutSession = await fetch(`${baseUrl}/dashboard`, { redirect: 'manual' });
   assert.equal(withoutSession.status, 302);
   assert.equal(withoutSession.headers.get('location'), '/login');
+  const historyWithoutSession = await fetch(`${baseUrl}/asistente/planillas`, { redirect: 'manual' });
+  assert.equal(historyWithoutSession.status, 302);
+  assert.equal(historyWithoutSession.headers.get('location'), '/login');
   const apiWithoutSession = await fetch(`${baseUrl}/api/solicitudes/123/distribucion`);
   assert.equal(apiWithoutSession.status, 401);
   const availabilityWithoutSession = await fetch(`${baseUrl}/api/solicitudes/123/disponibilidad?numeroCheque=5001`);
@@ -388,8 +437,24 @@ async function main() {
 
   const wrongRole = await fetch(`${baseUrl}/admin/usuarios`, { headers: { cookie }, redirect: 'manual' });
   assert.equal(wrongRole.status, 403, `Redireccion inesperada a ${wrongRole.headers.get('location')}`);
-  const correctRole = await fetch(`${baseUrl}/asistente/planillas`, { headers: { cookie } });
+  const correctRole = await fetch(`${baseUrl}/asistente/planillas?fecha=${historyDate}&agenciaId=${alternateAgencyId}`, { headers: { cookie } });
   assert.equal(correctRole.status, 200);
+  const historyHtml = await correctRole.text();
+  assert.match(historyHtml, new RegExp(`PLN-${suffix}`));
+  assert.match(historyHtml, new RegExp(`PLN-G-${suffix}`));
+  assert.doesNotMatch(historyHtml, new RegExp(`PLN-ALT-${suffix}`));
+  const ownDetailResponse = await fetch(`${baseUrl}/asistente/planillas/${groupedPlanilla.id}`, { headers: { cookie } });
+  assert.equal(ownDetailResponse.status, 200);
+  const ownDetailHtml = await ownDetailResponse.text();
+  assert.match(ownDetailHtml, /19536/);
+  assert.match(ownDetailHtml, /19537/);
+  assert.match(ownDetailHtml, /Q\s*4,000\.00/);
+  assert.equal((await fetch(`${baseUrl}/asistente/planillas/${alternatePlanilla.id}`, { headers: { cookie } })).status, 404);
+  assert.equal((await fetch(`${baseUrl}/asistente/planillas/0`, { headers: { cookie } })).status, 400);
+  assert.equal((await fetch(`${baseUrl}/asistente/planillas?fecha=2026-02-30`, { headers: { cookie } })).status, 400);
+  const emptyHistory = await fetch(`${baseUrl}/asistente/planillas?fecha=2000-01-01`, { headers: { cookie } });
+  assert.equal(emptyHistory.status, 200);
+  assert.match(await emptyHistory.text(), /No hay planillas enviadas/);
   const newPlanillaPage = await fetch(`${baseUrl}/asistente/nueva-planilla`, { headers: { cookie } });
   assert.equal(newPlanillaPage.status, 200);
   assert.match(await newPlanillaPage.text(), /data-fetch-distribution/);
@@ -458,7 +523,7 @@ async function main() {
   await pool.request()
     .input('agenciaId', sql.Int, agenciaId)
     .query('UPDATE dbo.agencias SET activo = 0 WHERE id = @agenciaId;');
-  assert.equal((await fetch(`${baseUrl}/dashboard`, { headers: { cookie: agencyCookie }, redirect: 'manual' })).status, 302);
+  assert.equal((await fetch(`${baseUrl}/asistente/planillas`, { headers: { cookie: agencyCookie }, redirect: 'manual' })).status, 302);
   await pool.request()
     .input('agenciaId', sql.Int, agenciaId)
     .query('UPDATE dbo.agencias SET activo = 1 WHERE id = @agenciaId;');

@@ -86,7 +86,7 @@ La aplicacion queda en `http://localhost:3000`. Para recarga automatica usar `np
 
 La verificacion integral requiere una base separada existente indicada por `TEST_DB_DATABASE`, cuyo nombre debe terminar en `TestDB` y ser distinto de `DB_DATABASE`. El script cambia a esa base antes de cargar la aplicacion y comprueba `DB_NAME()` antes de crear fixtures. Si la base no existe o no cumple esas condiciones, falla sin operar sobre la base de desarrollo.
 
-La base de pruebas no se crea ni se elimina automaticamente. Un operador debe crearla explicitamente y aplicar `002` y `003` con `sqlcmd -d` antes de ejecutar:
+La base de pruebas no se crea ni se elimina automaticamente. Un operador debe crearla explicitamente y aplicar `002`, `003` y `004` con `sqlcmd -d` antes de ejecutar:
 
 ```powershell
 npm test
@@ -106,7 +106,9 @@ La integracion crea datos temporales en la base de pruebas, valida repositorios,
 
 El login provisional fue reemplazado por consulta a SQL Server y `bcrypt.compare`. La sesion solo guarda `id`, `nombre`, `email`, `rol`, `agenciaId` y el nombre de agencia para presentacion; nunca guarda contrasenas ni hashes. Cada peticion protegida vuelve a consultar el usuario por ID para aplicar inmediatamente desactivaciones y cambios de rol o agencia.
 
-La pantalla Nueva planilla consulta la distribucion mediante `GET /api/solicitudes/:numeroSolicitud/distribucion`. Express llama al Web Service externo, valida la respuesta y la normaliza antes de devolverla al navegador. Obtener datos no inserta registros SQL; los mocks de las otras pantallas permanecen temporalmente.
+La pantalla Nueva planilla consulta la distribucion mediante `GET /api/solicitudes/:numeroSolicitud/distribucion`. Express llama al Web Service externo, valida la respuesta y la normaliza antes de devolverla al navegador. Obtener datos no inserta registros SQL.
+
+`GET /asistente/planillas` y `GET /asistente/planillas/:id` consultan el historial real de SQL Server en modo de solo lectura. La agencia siempre procede de la sesion revalidada, el listado filtra por el dia UTC de `fecha_envio` y pagina 20 planillas por consulta, y el detalle conserva una fila por cada solicitud o miembro grupal. Las pantallas de Contabilidad continúan usando datos de demostracion.
 
 El contrato, campos, calculos conocidos, errores y reglas pendientes del Web Service estan en [`docs/webservice.md`](docs/webservice.md). El modelo SQL se describe en [`docs/database.md`](docs/database.md) y las reglas funcionales en [`docs/business-rules.md`](docs/business-rules.md).
 

@@ -31,6 +31,7 @@ Reglas del flujo:
 18. Cada emision de cheque de una solicitud grupal representa un miembro y genera un cuadro y una fila independientes.
 19. Un grupo sin abonos se calcula por emision. Si el grupo contiene abonos, no se asocian por posicion ni por heuristicas: el calculo queda no confirmado y el grupo no puede enviarse.
 20. Todos los miembros de un grupo calculado se agregan y envian juntos. Cada uno requiere un numero de cheque distinto.
+21. El historial del asistente es de solo lectura y muestra exclusivamente planillas de su agencia revalidada. El filtro diario utiliza `fecha_envio`; cada miembro grupal se cuenta y se muestra como un registro independiente.
 
 ## Pendientes de confirmacion del ingeniero
 
@@ -38,4 +39,4 @@ Reglas del flujo:
 2. Confirmacion definitiva de que `Ejecutado === true` representa el estado final requerido. Por seguridad, actualmente se rechaza cualquier otro valor.
 3. Que clave relaciona un abono con una emision especifica cuando una distribucion grupal contiene ambos tipos.
 4. Confirmacion contractual de estabilidad del campo `ID` de la emision, observado como unico y estable en consultas repetidas.
-5. El historial real y el flujo de recepcion/procesamiento de Contabilidad. Las planillas enviadas ya quedan persistidas, pero esas interfaces siguen fuera de alcance.
+5. El flujo real de recepcion/procesamiento de Contabilidad. Las planillas enviadas y el historial del asistente ya usan SQL Server, pero Contabilidad permanece fuera de alcance.

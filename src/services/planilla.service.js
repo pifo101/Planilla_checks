@@ -11,6 +11,8 @@ const {
 } = require('./planilla-token.service');
 
 const MAX_SOLICITUDES = 100;
+const HISTORY_PAGE_SIZE = 20;
+const MAX_HISTORY_PAGE = Math.floor(2_147_483_647 / HISTORY_PAGE_SIZE) + 1;
 const DUPLICATE_SQL_NUMBERS = new Set([2601, 2627]);
 
 class PlanillaError extends Error {
@@ -322,10 +324,93 @@ async function createPlanilla(user, submission, options = {}) {
   throw new PlanillaError('PLANILLA_PERSISTENCE_FAILED', 'No fue posible generar el codigo de la planilla.', 500);
 }
 
+function requireAssistantAgency(user) {
+  if (user?.rol !== 'ASISTENTE' || !Number.isSafeInteger(user.agenciaId) || user.agenciaId <= 0) {
+    throw new PlanillaError(
+      'ASSISTANT_AGENCY_REQUIRED',
+      'El usuario no tiene una agencia habilitada para consultar planillas.',
+      403,
+    );
+  }
+  return user.agenciaId;
+}
+
+function normalizeHistoryDate(value, now = new Date()) {
+  const selectedDate = value == null || value === '' ? now.toISOString().slice(0, 10) : value;
+  if (typeof selectedDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)
+      || selectedDate < '0001-01-01') {
+    throw new PlanillaError('INVALID_HISTORY_DATE', 'Selecciona una fecha valida.');
+  }
+
+  const startDate = new Date(`${selectedDate}T00:00:00.000Z`);
+  if (Number.isNaN(startDate.getTime()) || startDate.toISOString().slice(0, 10) !== selectedDate) {
+    throw new PlanillaError('INVALID_HISTORY_DATE', 'Selecciona una fecha valida.');
+  }
+  return {
+    selectedDate,
+    startDate,
+    endDate: new Date(startDate.getTime() + (24 * 60 * 60 * 1000)),
+  };
+}
+
+function normalizePage(value) {
+  if (value == null || value === '') return 1;
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    throw new PlanillaError('INVALID_HISTORY_PAGE', 'La pagina solicitada no es valida.');
+  }
+  const page = Number(value);
+  if (!Number.isSafeInteger(page) || page <= 0 || page > MAX_HISTORY_PAGE) {
+    throw new PlanillaError('INVALID_HISTORY_PAGE', 'La pagina solicitada no es valida.');
+  }
+  return page;
+}
+
+function normalizePlanillaId(value) {
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) {
+    throw new PlanillaError('INVALID_PLANILLA_ID', 'La planilla solicitada no es valida.');
+  }
+  const id = Number(value);
+  if (!Number.isSafeInteger(id)) {
+    throw new PlanillaError('INVALID_PLANILLA_ID', 'La planilla solicitada no es valida.');
+  }
+  return id;
+}
+
+async function listSentPlanillas(user, filters = {}, options = {}) {
+  const agenciaId = requireAssistantAgency(user);
+  const date = normalizeHistoryDate(filters.fecha, options.now ? options.now() : new Date());
+  const page = normalizePage(filters.page);
+  const result = await planillaRepository.findSentByAgencyAndDate(
+    agenciaId,
+    date.startDate,
+    date.endDate,
+    page,
+    HISTORY_PAGE_SIZE,
+  );
+  const totalPages = Math.max(1, Math.ceil(result.total / HISTORY_PAGE_SIZE));
+
+  if (page > totalPages) {
+    throw new PlanillaError('INVALID_HISTORY_PAGE', 'La pagina solicitada no es valida.');
+  }
+  return { ...result, page, pageSize: HISTORY_PAGE_SIZE, totalPages, selectedDate: date.selectedDate };
+}
+
+async function getSentPlanillaDetail(user, rawId) {
+  const agenciaId = requireAssistantAgency(user);
+  const id = normalizePlanillaId(rawId);
+  return planillaRepository.findDetailForAgency(id, agenciaId);
+}
+
 module.exports = {
+  HISTORY_PAGE_SIZE,
   MAX_SOLICITUDES,
   PlanillaError,
   createPlanilla,
   generatePlanillaCode,
+  getSentPlanillaDetail,
+  listSentPlanillas,
+  normalizeHistoryDate,
+  normalizePage,
+  normalizePlanillaId,
   validateSubmission,
 };
