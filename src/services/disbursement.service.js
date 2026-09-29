@@ -189,14 +189,6 @@ function normalizeDisbursement(distribuciones, { fechaExtraccion = new Date() } 
     );
   }
 
-  if (result.abonos.some((item) => toCents(item.Gasto01, 'Gasto01') !== 0)) {
-    return unsupported(
-      result,
-      'UNCONFIRMED_EXPENSE_FIELDS',
-      ['Se recibio Gasto01 fuera de una emision de cheque y su uso no esta confirmado.'],
-    );
-  }
-
   if (result.cheques.length >= 2) {
     return unsupported(
       result,

@@ -14,7 +14,9 @@ Reglas del flujo:
 6. El monto aprobado depende de la informacion recibida del Web Service:
    - Sin cancelacion: `montoAprobado = descuentos + montoCheque`.
    - Con cancelacion: `montoAprobado = descuentos + montoCheque + montoCancelado`.
-   - Para el proceso actual de Planilla Checks, el campo de descuentos utilizado es Gasto01. Los campos Gasto02-Gasto10 no forman parte del cálculo requerido.
+   - `descuentos` utiliza unicamente `Gasto01` de la Emision de cheque.
+   - `Gasto01` de un Abono a prestamo se ignora, incluso si es distinto de cero.
+   - Los campos `Gasto02-Gasto10` no participan actualmente en el calculo, sin importar la forma de desembolso.
 7. La metodologia cuenta unicamente operaciones con `FormaDesembolso = 1`: una es `INDIVIDUAL` y dos o mas son `GRUPAL`.
 8. Una planilla puede contener varias solicitudes.
 9. Una vez enviada, la planilla debe conservarse historicamente.

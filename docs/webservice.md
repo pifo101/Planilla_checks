@@ -45,12 +45,12 @@ La disponibilidad se consulta con `GET /api/solicitudes/:numeroSolicitud/disponi
 - `FormaDesembolso = 3`: Abono a prestamo.
 - `NombreEnCheque`: nombre del cliente; todos los registros deben coincidir.
 - `ValorNeto`: monto del cheque o del abono segun su forma.
-- `Gasto01`: descuento usado para los escenarios actualmente confirmados.
+- `Gasto01`: se usa como descuento solamente cuando pertenece a una Emision de cheque; en un Abono a prestamo se ignora, incluso si es distinto de cero.
 - `NumeroCredito`: se conserva desde el abono.
 - `OrdenPago`: se conserva desde la emision de cheque y no es el numero de cheque.
 - `Ejecutado`: actualmente debe ser estrictamente `true`.
 
-Para el proceso actual de Planilla Checks, el campo de descuentos utilizado es Gasto01. Los campos Gasto02-Gasto10 no forman parte del cálculo requerido.
+Los campos `Gasto02-Gasto10` no participan actualmente en el calculo, sin importar la forma de desembolso.
 
 No se utiliza `Monto`, porque los ejemplos reales lo devuelven en cero. `numeroCheque` sigue siendo un dato manual de Planilla Checks.
 
@@ -64,6 +64,8 @@ descuentos     = Gasto01 de la emision de cheque
 montoCheque    = ValorNeto de la emision de cheque
 montoAprobado  = montoCancelado + descuentos + montoCheque
 ```
+
+`Gasto01` del abono no se suma, no se trata como descuento y no invalida la distribucion.
 
 Los importes se convierten a centavos enteros antes de sumarlos y se devuelven con dos decimales. La fecha de extraccion la genera Planilla Checks al recibir correctamente la respuesta.
 
