@@ -121,11 +121,14 @@ test('no elige silenciosamente entre nombres distintos', () => {
   assert.equal(normalize(fixture).reason, 'MULTIPLE_CLIENT_NAMES');
 });
 
-test('usa solo Gasto01 como descuento aunque Gasto02 y Gasto03 tengan valores', () => {
+test('usa solo Gasto01 del cheque aunque Gasto02-Gasto10 tengan valores', () => {
   const fixture = structuredClone(fixtures.individualWithLoanPayment);
   fixture[1].Gasto01 = 600;
-  fixture[1].Gasto02 = 100;
-  fixture[1].Gasto03 = 50;
+  for (let expenseNumber = 2; expenseNumber <= 10; expenseNumber += 1) {
+    const field = `Gasto${String(expenseNumber).padStart(2, '0')}`;
+    fixture[0][field] = expenseNumber * 100;
+    fixture[1][field] = expenseNumber * 200;
+  }
   const result = normalize(fixture);
 
   assert.equal(result.supported, true);
@@ -133,17 +136,25 @@ test('usa solo Gasto01 como descuento aunque Gasto02 y Gasto03 tengan valores', 
   assert.equal(result.montoAprobado, 1575);
 });
 
-test('no usa silenciosamente Gasto01 de un abono en una distribucion mixta', () => {
+test('ignora Gasto01 no cero del abono en una distribucion individual', () => {
   const fixture = structuredClone(fixtures.individualWithLoanPayment);
-  fixture[0].Gasto01 = 25;
+  fixture[0].ValorNeto = 2500;
+  fixture[0].Gasto01 = 999;
+  fixture[1].ValorNeto = 9000;
+  fixture[1].Gasto01 = 500;
   const result = normalize(fixture);
 
-  assert.equal(result.reason, 'UNCONFIRMED_EXPENSE_FIELDS');
-  assert.match(result.warnings[0], /Gasto01/);
+  assertKnownResult(result, {
+    montoCancelado: 2500,
+    descuentos: 500,
+    montoCheque: 9000,
+    montoAprobado: 12000,
+  });
 });
 
 test('cuenta solo emisiones de cheque para metodologia grupal sin calcular montos', () => {
   const fixture = structuredClone(fixtures.individualWithLoanPayment);
+  fixture[0].Gasto01 = 999;
   fixture.push({
     ...fixture[1],
     OrdenPago: 99999,

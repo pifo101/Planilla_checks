@@ -11,7 +11,6 @@ const ERROR_MESSAGES = {
   ONLY_LOAN_PAYMENT_UNCONFIRMED: 'La solicitud solo contiene un abono a prestamo y todavia no puede procesarse.',
   NON_FINAL_DISTRIBUTION: 'La solicitud contiene operaciones que todavia no estan finalizadas.',
   MULTIPLE_CLIENT_NAMES: 'La respuesta contiene nombres de cliente diferentes.',
-  UNCONFIRMED_EXPENSE_FIELDS: 'La respuesta contiene gastos cuya regla esta pendiente de confirmacion.',
   GROUPED_AMOUNT_CALCULATION_UNCONFIRMED: 'La solicitud es grupal y su calculo esta pendiente de confirmacion.',
   UNSUPPORTED_DISTRIBUTION: 'La distribucion recibida todavia no esta soportada.',
 };
