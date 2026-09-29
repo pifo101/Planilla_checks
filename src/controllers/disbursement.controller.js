@@ -1,5 +1,6 @@
 const { DisbursementError } = require('../services/disbursement.service');
 const { getDistribucionDesembolso } = require('../services/webservice.service');
+const { createSubmissionToken } = require('../services/planilla-token.service');
 
 const ERROR_MESSAGES = {
   INVALID_REQUEST_NUMBER: 'Ingresa un numero de solicitud valido.',
@@ -38,6 +39,7 @@ async function getDistribution(req, res) {
       success: true,
       data: {
         ...data,
+        submissionToken: createSubmissionToken(req.session.user.id, req.params.numeroSolicitud, data),
         agenciaId: req.session.user.agenciaId || null,
         agencia: req.session.user.agenciaNombre || null,
       },

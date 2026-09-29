@@ -14,6 +14,7 @@ const {
 const userRepository = require('../src/repositories/user.repository');
 const authService = require('../src/services/auth.service');
 const planillaService = require('../src/services/planilla.service');
+const { createSubmissionToken } = require('../src/services/planilla-token.service');
 const planillaRepository = require('../src/repositories/planilla.repository');
 
 const suffix = `${Date.now()}${crypto.randomInt(1000, 9999)}`;
@@ -59,6 +60,12 @@ async function cleanup() {
     .input('accountingEmail', sql.NVarChar(254), accountingEmail)
     .input('deletedEmail', sql.NVarChar(254), deletedEmail)
     .query(`
+      UPDATE p
+      SET estado = 'BORRADOR', fecha_envio = NULL
+      FROM dbo.planillas AS p
+      INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
+      WHERE a.codigo = @agencyCode;
+
       DELETE s
       FROM dbo.solicitudes_planilla AS s
       INNER JOIN dbo.planillas AS p ON p.id = s.planilla_id
@@ -151,22 +158,58 @@ async function main() {
     .input('agenciaId', sql.Int, agenciaId)
     .query('UPDATE dbo.agencias SET activo = 1 WHERE id = @agenciaId;');
 
+  const revalidatedAssistant = await userRepository.findById(Number(activeUser.id));
+  assert.equal(revalidatedAssistant.rol, 'ASISTENTE');
+  assert.equal(Boolean(revalidatedAssistant.activo), true);
+  assert.equal(Boolean(revalidatedAssistant.agenciaActivo), true);
+  assert.equal(Number(revalidatedAssistant.agenciaId), agenciaId);
+  const serviceUser = {
+    id: Number(revalidatedAssistant.id),
+    nombre: revalidatedAssistant.nombre,
+    email: revalidatedAssistant.email,
+    rol: revalidatedAssistant.rol,
+    agenciaId: Number(revalidatedAssistant.agenciaId),
+    agenciaNombre: revalidatedAssistant.agenciaNombre,
+  };
+  assert.equal(Number.isSafeInteger(serviceUser.id), true);
+  assert.equal(Number.isSafeInteger(serviceUser.agenciaId), true);
+
   const solicitud = {
     numeroSolicitud: suffix,
-    nombreCliente: 'Cliente temporal',
+    cliente: 'Cliente temporal',
+    montoAprobadoCentavos: 150000,
+    montoCanceladoCentavos: 10000,
+    descuentosCentavos: 20000,
+    montoChequeCentavos: 120000,
+    numeroCheque: `CHK-${suffix}`,
+    metodologia: 'INDIVIDUAL',
+  };
+  solicitud.submissionToken = createSubmissionToken(serviceUser.id, solicitud.numeroSolicitud, {
+    cliente: solicitud.cliente,
+    metodologia: solicitud.metodologia,
+    montoAprobado: solicitud.montoAprobadoCentavos / 100,
+    montoCancelado: solicitud.montoCanceladoCentavos / 100,
+    descuentos: solicitud.descuentosCentavos / 100,
+    montoCheque: solicitud.montoChequeCentavos / 100,
+  });
+  const repositorySolicitud = {
+    numeroSolicitud: solicitud.numeroSolicitud,
+    nombreCliente: solicitud.cliente,
     montoAprobado: 1500,
     montoCancelado: 100,
     descuentos: 200,
     montoCheque: 1200,
-    numeroCheque: `CHK-${suffix}`,
+    numeroCheque: solicitud.numeroCheque,
+    metodologia: solicitud.metodologia,
     fechaExtraccion: new Date(),
   };
   const createdPlanilla = await planillaService.createPlanilla(
-    { ...activeUser, rol: 'ASISTENTE', agenciaId },
-    { codigo: `PLN-${suffix}` },
-    [solicitud],
+    serviceUser,
+    { solicitudes: [solicitud] },
+    { generateCode: () => `PLN-${suffix}` },
   );
   assert.equal(createdPlanilla.agenciaId, agenciaId);
+  assert.equal(createdPlanilla.estado, 'ENVIADA');
 
   const lockTransaction = new sql.Transaction(pool);
   await lockTransaction.begin();
@@ -193,11 +236,13 @@ async function main() {
   }
 
   await assert.rejects(
-    planillaService.createPlanilla(
-      { ...activeUser, rol: 'ASISTENTE', agenciaId },
-      { codigo: `PLN-S-${suffix}` },
-      [{ ...solicitud, numeroCheque: `CHK-S-${suffix}` }],
-    ),
+    planillaRepository.createWithSolicitudes({
+      codigo: `PLN-S-${suffix}`,
+      agenciaId,
+      usuarioId: serviceUser.id,
+      fechaEnvio: new Date(),
+      estado: 'ENVIADA',
+    }, [{ ...repositorySolicitud, numeroCheque: `CHK-S-${suffix}` }]),
     (error) => error.number === 2627 || error.number === 2601,
   );
 
@@ -211,11 +256,13 @@ async function main() {
     `);
   assert.equal(rollbackResult.recordset[0].total, 0);
   await assert.rejects(
-    planillaService.createPlanilla(
-      { ...activeUser, rol: 'ASISTENTE', agenciaId },
-      { codigo: `PLN-C-${suffix}` },
-      [{ ...solicitud, numeroSolicitud: `SOL-C-${suffix}` }],
-    ),
+    planillaRepository.createWithSolicitudes({
+      codigo: `PLN-C-${suffix}`,
+      agenciaId,
+      usuarioId: serviceUser.id,
+      fechaEnvio: new Date(),
+      estado: 'ENVIADA',
+    }, [{ ...repositorySolicitud, numeroSolicitud: `8${suffix}` }]),
     (error) => error.number === 2627 || error.number === 2601,
   );
 
@@ -228,20 +275,48 @@ async function main() {
   assert.equal(apiWithoutSession.status, 401);
   const availabilityWithoutSession = await fetch(`${baseUrl}/api/solicitudes/123/disponibilidad?numeroCheque=5001`);
   assert.equal(availabilityWithoutSession.status, 401);
+  const submitWithoutSession = await fetch(`${baseUrl}/api/planillas`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ solicitudes: [] }),
+  });
+  assert.equal(submitWithoutSession.status, 401);
 
   assert.equal((await login(baseUrl, activeEmail, `${password}-incorrecta`)).status, 401);
   assert.equal((await login(baseUrl, inactiveEmail, password)).status, 401);
 
   const validLogin = await login(baseUrl, activeEmail, password);
   assert.equal(validLogin.status, 302);
-  assert.equal(validLogin.headers.get('location'), '/dashboard');
+  assert.equal(validLogin.headers.get('location'), '/asistente/nueva-planilla');
   const cookie = validLogin.headers.get('set-cookie').split(';', 1)[0];
-  const userBeforeProtectedRequest = await userRepository.findById(activeUser.id);
+  const submittedResponse = await fetch(`${baseUrl}/api/planillas`, {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      solicitudes: [{
+        ...solicitud,
+        numeroSolicitud: `7${suffix}`,
+        numeroCheque: `WEB-${suffix}`,
+        submissionToken: createSubmissionToken(serviceUser.id, `7${suffix}`, {
+          cliente: solicitud.cliente,
+          metodologia: solicitud.metodologia,
+          montoAprobado: solicitud.montoAprobadoCentavos / 100,
+          montoCancelado: solicitud.montoCanceladoCentavos / 100,
+          descuentos: solicitud.descuentosCentavos / 100,
+          montoCheque: solicitud.montoChequeCentavos / 100,
+        }),
+      }],
+    }),
+  });
+  assert.equal(submittedResponse.status, 201);
+  const submittedPayload = await submittedResponse.json();
+  assert.equal(submittedPayload.data.planilla.estado, 'ENVIADA');
+  const userBeforeProtectedRequest = await userRepository.findById(serviceUser.id);
   assert.equal(userBeforeProtectedRequest.rol, 'ASISTENTE');
   assert.equal(userBeforeProtectedRequest.activo, true);
   assert.equal(userBeforeProtectedRequest.agenciaActivo, true);
   assert.equal(userBeforeProtectedRequest.agenciaId, agenciaId);
-  assert.equal(Number.isSafeInteger(Number(activeUser.id)), true);
+  assert.equal(Number.isSafeInteger(serviceUser.id), true);
 
   const wrongRole = await fetch(`${baseUrl}/admin/usuarios`, { headers: { cookie }, redirect: 'manual' });
   assert.equal(wrongRole.status, 403, `Redireccion inesperada a ${wrongRole.headers.get('location')}`);
@@ -284,13 +359,13 @@ async function main() {
   assert.deepEqual(parameterizedResult, { solicitudUtilizada: false, chequeUtilizado: false });
 
   await pool.request()
-    .input('userId', sql.Int, activeUser.id)
+    .input('userId', sql.Int, serviceUser.id)
     .query("UPDATE dbo.usuarios SET rol = 'CONTABILIDAD' WHERE id = @userId;");
   assert.equal((await fetch(`${baseUrl}/asistente/planillas`, { headers: { cookie } })).status, 403);
   assert.equal((await fetch(`${baseUrl}/contabilidad/planillas`, { headers: { cookie } })).status, 200);
 
   await pool.request()
-    .input('userId', sql.Int, activeUser.id)
+    .input('userId', sql.Int, serviceUser.id)
     .input('agenciaId', sql.Int, alternateAgencyId)
     .query("UPDATE dbo.usuarios SET rol = 'ASISTENTE', agencia_id = @agenciaId WHERE id = @userId;");
   const changedAgencyPage = await fetch(`${baseUrl}/asistente/nueva-planilla`, { headers: { cookie } });
@@ -298,7 +373,7 @@ async function main() {
   assert.match(await changedAgencyPage.text(), new RegExp(`Agencia alterna ${suffix}`));
 
   await pool.request()
-    .input('userId', sql.Int, activeUser.id)
+    .input('userId', sql.Int, serviceUser.id)
     .input('agenciaId', sql.Int, agenciaId)
     .query('UPDATE dbo.usuarios SET agencia_id = @agenciaId, activo = 0 WHERE id = @userId;');
   const disabledUserResponse = await fetch(`${baseUrl}/api/solicitudes/123/distribucion`, {
@@ -307,7 +382,7 @@ async function main() {
   assert.equal(disabledUserResponse.status, 401);
   assert.equal((await disabledUserResponse.json()).error.code, 'AUTH_REQUIRED');
   await pool.request()
-    .input('userId', sql.Int, activeUser.id)
+    .input('userId', sql.Int, serviceUser.id)
     .query('UPDATE dbo.usuarios SET activo = 1 WHERE id = @userId;');
 
   const agencySession = await login(baseUrl, activeEmail, password);
@@ -337,6 +412,12 @@ async function main() {
     headers: { cookie: accountingCookie },
   });
   assert.equal(forbiddenAvailability.status, 403);
+  const forbiddenSubmission = await fetch(`${baseUrl}/api/planillas`, {
+    method: 'POST',
+    headers: { cookie: accountingCookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ solicitudes: [solicitud] }),
+  });
+  assert.equal(forbiddenSubmission.status, 403);
 
   console.log('Verificacion integral completada correctamente.');
 }

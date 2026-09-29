@@ -19,17 +19,21 @@ document.addEventListener('click', (event) => {
 const solicitudForm = document.querySelector('[data-solicitud-form]');
 
 if (solicitudForm) {
+  const maxDraftRequests = 100;
   const loadButton = solicitudForm.querySelector('[data-fetch-distribution]');
   const addButton = solicitudForm.querySelector('[data-add-to-draft]');
   const checkNumberInput = solicitudForm.elements.numeroCheque;
   const feedback = solicitudForm.querySelector('[data-request-feedback]');
   const draftBody = document.querySelector('[data-draft-body]');
   const draftCount = document.querySelector('[data-draft-count]');
+  const sendButton = document.querySelector('[data-send-planilla]');
   const currency = new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' });
   let currentRequest = null;
   let checkingAvailability = false;
+  let sendingPlanilla = false;
   const distributionRequests = createRequestGuard();
   const availabilityRequests = createRequestGuard();
+  const planillaSubmitter = createPlanillaSubmitter(fetch);
   const draftRequests = [];
 
   function showFeedback(message, tone) {
@@ -73,6 +77,7 @@ if (solicitudForm) {
   function updateAddButton() {
     const checkNumber = checkNumberInput.value.trim();
     addButton.disabled = checkingAvailability
+      || sendingPlanilla
       || !currentRequest
       || !currentRequest.supported
       || !validCheckNumber(checkNumber);
@@ -87,6 +92,10 @@ if (solicitudForm) {
 
   function renderDraft() {
     draftCount.textContent = `${draftRequests.length} ${draftRequests.length === 1 ? 'registro' : 'registros'}`;
+    sendButton.disabled = sendingPlanilla || draftRequests.length === 0;
+    sendButton.innerHTML = sendingPlanilla
+      ? '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Enviando'
+      : '<i class="bi bi-send-check me-2"></i>Enviar planilla';
 
     if (draftRequests.length === 0) {
       draftBody.innerHTML = '<tr><td class="text-center text-muted py-4" colspan="10">No hay solicitudes agregadas.</td></tr>';
@@ -102,7 +111,7 @@ if (solicitudForm) {
           <td>${escapeHtml(item.numeroCheque)}</td>
           <td>${escapeHtml(item.metodologia)}</td>
           <td>${new Date(item.fechaExtraccion).toLocaleString('es-GT')}</td>
-          <td><button class="btn btn-sm btn-outline-danger" type="button" data-remove-draft="${index}" aria-label="Eliminar solicitud ${escapeHtml(item.numeroSolicitud)}"><i class="bi bi-trash"></i><span class="ms-1">Eliminar</span></button></td>
+          <td><button class="btn btn-sm btn-outline-danger" type="button" data-remove-draft="${index}" aria-label="Eliminar solicitud ${escapeHtml(item.numeroSolicitud)}" ${sendingPlanilla ? 'disabled' : ''}><i class="bi bi-trash"></i><span class="ms-1">Eliminar</span></button></td>
         </tr>
       `).join('');
     }
@@ -181,6 +190,7 @@ if (solicitudForm) {
         fechaExtraccion: payload.data.fechaExtraccion,
         numeroCredito: payload.data.numeroCredito,
         ordenPago: payload.data.ordenPago,
+        submissionToken: payload.data.submissionToken,
         supported: payload.data.supported === true,
       };
       updateAddButton();
@@ -220,6 +230,7 @@ if (solicitudForm) {
   });
 
   addButton.addEventListener('click', async () => {
+    if (sendingPlanilla) return;
     if (!currentRequest || !currentRequest.supported) {
       showFeedback('Consulta nuevamente una solicitud soportada antes de agregarla.', 'warning');
       updateAddButton();
@@ -239,6 +250,10 @@ if (solicitudForm) {
     }
     if (draftRequests.some((item) => item.numeroCheque.toUpperCase() === numeroCheque.toUpperCase())) {
       showFeedback('Este numero de cheque ya fue agregado al borrador.', 'warning');
+      return;
+    }
+    if (draftRequests.length >= maxDraftRequests) {
+      showFeedback(`El borrador admite como maximo ${maxDraftRequests} solicitudes por envio.`, 'warning');
       return;
     }
 
@@ -303,10 +318,11 @@ if (solicitudForm) {
         fechaExtraccion: requestToAdd.fechaExtraccion,
         numeroCredito: requestToAdd.numeroCredito,
         ordenPago: requestToAdd.ordenPago,
+        submissionToken: requestToAdd.submissionToken,
       });
       renderDraft();
       clearCurrentRequest();
-      showFeedback('Solicitud agregada al borrador. Esto todavia no envia ni guarda la planilla.', 'success');
+      showFeedback('Solicitud agregada al borrador. Envia la planilla para guardarla.', 'success');
       solicitudForm.elements.numeroSolicitud.focus();
     } catch (error) {
       if (availabilityRequests.isCurrent(availabilityRequest) && error.name !== 'AbortError') {
@@ -323,10 +339,36 @@ if (solicitudForm) {
 
   draftBody.addEventListener('click', (event) => {
     const removeButton = event.target.closest('[data-remove-draft]');
-    if (!removeButton) return;
+    if (!removeButton || sendingPlanilla) return;
     draftRequests.splice(Number(removeButton.dataset.removeDraft), 1);
     renderDraft();
     showFeedback('Solicitud eliminada del borrador.', 'info');
+  });
+
+  sendButton.addEventListener('click', async () => {
+    if (sendingPlanilla || planillaSubmitter.isPending()) return;
+    if (draftRequests.length === 0) {
+      showFeedback('Agrega al menos una solicitud antes de enviar la planilla.', 'warning');
+      renderDraft();
+      return;
+    }
+
+    sendingPlanilla = true;
+    updateAddButton();
+    renderDraft();
+    showFeedback('Enviando y guardando la planilla...', 'info');
+    try {
+      const planilla = await planillaSubmitter.submit(draftRequests);
+      draftRequests.length = 0;
+      renderDraft();
+      showFeedback(`Planilla ${planilla.codigo} enviada y guardada correctamente.`, 'success');
+    } catch (error) {
+      showFeedback(error.message || 'No fue posible enviar la planilla. El borrador se conserva.', 'danger');
+    } finally {
+      sendingPlanilla = false;
+      updateAddButton();
+      renderDraft();
+    }
   });
 
   solicitudForm.querySelector('[data-clear-form]').addEventListener('click', () => {

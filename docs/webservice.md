@@ -33,11 +33,23 @@ El navegador nunca llama directamente al servidor externo. Consultar no crea pla
 ## Consulta, borrador e historial
 
 - `Obtener datos` consulta el Web Service y muestra una solicitud; no la guarda.
-- `Agregar a planilla` valida disponibilidad en SQL Server y agrega solo los campos necesarios a un borrador temporal en memoria del frontend; no envia ni inserta registros.
-- El borrador se pierde al recargar la pagina en esta fase.
-- `Enviar planilla` permanece deshabilitado. La persistencia del historial en SQL Server queda pendiente para la siguiente fase.
+- `Agregar a planilla` valida disponibilidad en SQL Server y agrega solo los campos necesarios a un borrador temporal en memoria del frontend; no inserta registros.
+- El borrador se pierde al recargar la pagina mientras no se haya enviado.
+- `Enviar planilla` usa `POST /api/planillas`. El servidor valida el contenido y persiste la planilla con todas sus solicitudes dentro de una transaccion.
+- Si el envio falla, el borrador se conserva. Si se confirma, queda vacio y la planilla queda en estado `ENVIADA`.
+- El historial real y el flujo de Contabilidad permanecen pendientes.
 
 La disponibilidad se consulta con `GET /api/solicitudes/:numeroSolicitud/disponibilidad?numeroCheque=...`. Este endpoint protegido solo ejecuta una consulta parametrizada sobre `solicitudes_planilla`.
+
+## Envio de planilla
+
+`POST /api/planillas` requiere una sesion activa con rol `ASISTENTE`. El body contiene un arreglo `solicitudes` de entre 1 y 100 elementos. Cada elemento envia `numeroSolicitud`, `numeroCheque` y el `submissionToken` firmado que el backend genero al normalizar la consulta.
+
+El navegador no envia como autoridad el usuario, agencia, codigo, estado, fechas, cliente, metodologia ni montos libres. El token esta ligado al usuario, vence a las ocho horas y protege el snapshot normalizado contra alteraciones. El backend toma usuario y agencia de la sesion revalidada, genera un codigo `PLN-<UUID>`, fuerza el estado `ENVIADA` y genera las fechas. Tambien valida duplicados internos, disponibilidad, metodologia `INDIVIDUAL`, montos enteros no negativos y coherencia financiera. No vuelve a llamar al Web Service institucional durante el POST.
+
+Una respuesta exitosa usa estado HTTP `201` y devuelve solamente `id`, `codigo` y `estado` de la planilla. Los errores de estructura o token usan `400`, un envio demasiado grande usa `413`, una metodologia no confirmada usa `422` y los duplicados usan `409`. Autenticacion y rol conservan las respuestas `401` y `403` existentes.
+
+Los prechecks no sustituyen las restricciones UNIQUE de SQL Server. Si otra peticion utiliza una solicitud o cheque entre la comprobacion y el INSERT, el error se devuelve como conflicto `409` sin exponer el mensaje SQL. Un fallo de cualquier INSERT revierte la planilla completa.
 
 ## Campos utilizados
 
@@ -87,7 +99,7 @@ El endpoint institucional disponible actualmente usa HTTP sin cifrado. Planilla 
 
 ## Consultas por numero de solicitud
 
-Por definicion del proceso institucional, las consultas no estan restringidas por agencia. Un usuario autorizado puede consultar cualquier numero de solicitud valido. La agencia del usuario se utilizara para identificar la procedencia de las planillas cuando se implemente el envio, no para autorizar la consulta de una solicitud.
+Por definicion del proceso institucional, las consultas no estan restringidas por agencia. Un usuario autorizado puede consultar cualquier numero de solicitud valido. Al enviar, la agencia se obtiene del asistente autenticado para identificar la procedencia de la planilla; no autoriza ni restringe la consulta de una solicitud.
 
 ## Pendiente de confirmacion del ingeniero
 

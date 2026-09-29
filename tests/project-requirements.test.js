@@ -25,3 +25,8 @@ test('pattern del cheque es compatible con RegExp v y conserva la regla actual',
   assert.equal(browserPattern.test('CHK 123'), false);
   assert.equal(browserPattern.test('A'.repeat(51)), false);
 });
+
+test('el endpoint de envio exige especificamente el rol ASISTENTE', () => {
+  const routes = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'api.routes.js'), 'utf8');
+  assert.match(routes, /router\.post\('\/planillas', requireRole\('ASISTENTE'\), submitPlanilla\)/);
+});
