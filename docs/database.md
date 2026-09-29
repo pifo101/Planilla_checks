@@ -23,7 +23,7 @@ Usuario --- crea Planilla
 ## Restricciones
 
 - `agencias.codigo`, `usuarios.email` y `planillas.codigo` son unicos.
-- `(solicitudes_planilla.numero_solicitud, solicitudes_planilla.miembro_id)` es unico. `miembro_id` es `NULL` para individuales y contiene el `ID` de la emision para grupales, permitiendo varias filas legitimas de una misma solicitud sin repetir un miembro.
+- `(solicitudes_planilla.numero_solicitud, solicitudes_planilla.miembro_id)` es unico. `miembro_id` es `NULL` para individuales y contiene el `ID` tecnico del registro de Emision de cheque para grupales, permitiendo varias filas legitimas de una misma solicitud sin repetir la misma emision. No representa la identidad funcional de la persona y nunca relaciona un abono con una emision; esa relacion se resuelve previamente mediante `NombreEnCheque` normalizado.
 - `solicitudes_planilla.numero_cheque` es unico globalmente y no admite valores nulos.
 - Los importes usan `DECIMAL(18,2)` y no admiten valores negativos.
 - El monto aprobado debe coincidir con descuentos, cheque y monto cancelado; el servicio lo calcula antes de insertar.
@@ -52,6 +52,8 @@ El historial del asistente consulta unicamente planillas enviadas de la agencia 
 `POST /api/planillas` no acepta agencia, usuario creador, codigo, estado, fechas ni montos libres como autoridad del navegador. El servicio toma usuario y agencia de la sesion revalidada, verifica el snapshot firmado emitido durante la consulta, genera un codigo tecnico `PLN-<UUID>` y comprueba disponibilidad antes de abrir la transaccion. Las restricciones UNIQUE de `(numero_solicitud, miembro_id)`, `numero_cheque` y `codigo` permanecen como defensa ante condiciones de carrera; los errores de conflicto se traducen sin exponer detalles SQL.
 
 `database/004_group_members.sql` migra instalaciones existentes: agrega `miembro_id`, elimina `UQ_solicitudes_numero_solicitud` y crea `UQ_solicitudes_numero_solicitud_miembro`. No elimina ni recrea tablas ni bases.
+
+Las reglas confirmadas de asociacion no requieren cambios de esquema: los montos resultantes ya se almacenan por fila de emision y el constraint compuesto sigue evitando duplicar la misma emision tecnica dentro de una solicitud.
 
 El borrador del navegador no es persistencia. El historial consultable del asistente ya usa SQL Server y es de solo lectura. La recepcion y el procesamiento de Contabilidad continuan pendientes.
 

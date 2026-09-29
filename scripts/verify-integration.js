@@ -224,6 +224,7 @@ async function main() {
   const groupedFingerprint = createGroupFingerprint(['19536', '19537'], new Date());
   const groupedRequests = ['19536', '19537'].map((miembroId, index) => {
     const numeroCheque = `GRP-${index}-${suffix}`;
+    const montoCancelado = index === 0 ? 500 : 0;
     return {
       numeroSolicitud: groupedRequestNumber,
       miembroId,
@@ -234,8 +235,8 @@ async function main() {
         miembroId,
         cantidadMiembros: 2,
         grupoFingerprint: groupedFingerprint,
-        montoAprobado: 2000,
-        montoCancelado: 0,
+        montoAprobado: 2000 + montoCancelado,
+        montoCancelado,
         descuentos: 100,
         montoCheque: 1900,
       }),
@@ -274,25 +275,29 @@ async function main() {
   assert.equal(agencyHistory.planillas.some((item) => Number(item.id) === Number(alternatePlanilla.id)), false);
   const groupedSummary = agencyHistory.planillas.find((item) => Number(item.id) === Number(groupedPlanilla.id));
   assert.equal(groupedSummary.cantidadRegistros, 2);
-  assert.equal(groupedSummary.totalAprobado, '4000.00');
-  assert.equal(groupedSummary.totalCancelado, '0.00');
+  assert.equal(groupedSummary.totalAprobado, '4500.00');
+  assert.equal(groupedSummary.totalCancelado, '500.00');
   assert.equal(groupedSummary.totalDescuentos, '200.00');
   assert.equal(groupedSummary.totalMontoCheque, '3800.00');
 
   const groupedDetail = await planillaRepository.findDetailForAgency(groupedPlanilla.id, agenciaId);
   assert.deepEqual(groupedDetail.solicitudes.map((item) => item.miembroId), ['19536', '19537']);
   assert.equal(groupedDetail.cantidadRegistros, 2);
-  assert.equal(groupedDetail.totalAprobado, '4000.00');
+  assert.equal(groupedDetail.totalAprobado, '4500.00');
+  assert.equal(groupedDetail.totalCancelado, '500.00');
+  assert.deepEqual(groupedDetail.solicitudes.map((item) => item.montoCancelado), ['500.00', '0.00']);
   assert.equal(await planillaRepository.findDetailForAgency(alternatePlanilla.id, agenciaId), null);
   const groupedRows = await pool.request()
     .input('numeroSolicitud', sql.NVarChar(50), groupedRequestNumber)
     .query(`
-      SELECT miembro_id AS miembroId, numero_cheque AS numeroCheque
+      SELECT miembro_id AS miembroId, numero_cheque AS numeroCheque,
+             CONVERT(VARCHAR(40), monto_cancelado) AS montoCancelado
       FROM dbo.solicitudes_planilla
       WHERE numero_solicitud = @numeroSolicitud
       ORDER BY miembro_id;
     `);
   assert.deepEqual(groupedRows.recordset.map((row) => row.miembroId), ['19536', '19537']);
+  assert.deepEqual(groupedRows.recordset.map((row) => row.montoCancelado), ['500.00', '0.00']);
 
   const rollbackGroupCode = `PLN-GR-${suffix}`;
   await assert.rejects(
@@ -448,7 +453,8 @@ async function main() {
   const ownDetailHtml = await ownDetailResponse.text();
   assert.match(ownDetailHtml, /19536/);
   assert.match(ownDetailHtml, /19537/);
-  assert.match(ownDetailHtml, /Q\s*4,000\.00/);
+  assert.match(ownDetailHtml, /Q\s*4,500\.00/);
+  assert.match(ownDetailHtml, /Q\s*500\.00/);
   assert.equal((await fetch(`${baseUrl}/asistente/planillas/${alternatePlanilla.id}`, { headers: { cookie } })).status, 404);
   assert.equal((await fetch(`${baseUrl}/asistente/planillas/0`, { headers: { cookie } })).status, 400);
   assert.equal((await fetch(`${baseUrl}/asistente/planillas?fecha=2026-02-30`, { headers: { cookie } })).status, 400);

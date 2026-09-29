@@ -55,13 +55,13 @@ Los prechecks no sustituyen las restricciones UNIQUE de SQL Server. Si otra peti
 
 - `FormaDesembolso = 1`: Emision de cheque.
 - `FormaDesembolso = 3`: Abono a prestamo.
-- `ID`: identifica una emision y se conserva como identidad tecnica del miembro grupal. Debe existir y ser unico dentro de la respuesta.
-- `NombreEnCheque`: nombre del cliente. En una solicitud grupal pertenece al miembro de cada emision.
+- `ID`: correlativo tecnico del registro de Emision de cheque. Se conserva como `miembroId` para snapshots, persistencia y duplicados, pero no identifica funcionalmente a la persona ni relaciona un abono con una emision. Debe existir y ser unico entre las emisiones grupales de la respuesta.
+- `NombreEnCheque`: nombre del cliente y unica clave funcional confirmada para relacionar un Abono a prestamo con su Emision de cheque.
 - `ValorNeto`: monto del cheque o del abono segun su forma.
 - `Gasto01`: se usa como descuento solamente cuando pertenece a una Emision de cheque; en un Abono a prestamo se ignora, incluso si es distinto de cero.
 - `NumeroCredito`: se conserva desde el abono.
 - `OrdenPago`: se conserva desde la emision de cheque y no es el numero de cheque.
-- `Ejecutado`: actualmente debe ser estrictamente `true`.
+- `Ejecutado`: debe ser estrictamente `true` en todos los registros de la distribucion. Cualquier otro valor bloquea la solicitud completa.
 
 Los campos `Gasto02-Gasto10` no participan actualmente en el calculo, sin importar la forma de desembolso.
 
@@ -78,21 +78,23 @@ montoCheque    = ValorNeto de la emision de cheque
 montoAprobado  = montoCancelado + descuentos + montoCheque
 ```
 
-`Gasto01` del abono no se suma, no se trata como descuento y no invalida la distribucion.
+`Gasto01` del abono no se suma, no se trata como descuento y no invalida la distribucion. Los mismos calculos se aplican a cada emision grupal y a su posible abono asociado.
 
 Los importes se convierten a centavos enteros antes de sumarlos y se devuelven con dos decimales. La fecha de extraccion la genera Planilla Checks al recibir correctamente la respuesta.
 
-`cantidadCheques` cuenta solo elementos con `FormaDesembolso = 1`. Una emision produce metodologia `INDIVIDUAL`; dos o mas producen `GRUPAL`, y cada emision produce un miembro/cuadro. Un grupo sin abonos se calcula por emision usando `montoCancelado = 0`, `descuentos = Gasto01` y `montoCheque = ValorNeto`. Si existe cualquier abono grupal, no se asigna a ningun miembro porque el contrato disponible no contiene una relacion confirmada; los miembros se muestran con calculo no confirmado y no pueden guardarse.
+`cantidadCheques` cuenta solo elementos con `FormaDesembolso = 1`. Una emision produce metodologia `INDIVIDUAL`; dos o mas producen `GRUPAL`, y cada emision produce un miembro/cuadro. Cada miembro puede carecer de abono o tener exactamente uno asociado por `NombreEnCheque`; un miembro que tenga unicamente abono no es valido.
+
+La clave de comparacion de `NombreEnCheque` se construye recortando espacios al inicio/final, colapsando cualquier secuencia de espacios a uno y convirtiendo a mayusculas. El nombre mostrado conserva sus caracteres y solo normaliza los espacios. No se eliminan acentos, puntuacion, palabras ni fragmentos, y no se usa similitud aproximada. Por ejemplo, `" MARIA   TOJORON "` coincide con `"Maria Tojoron"`, pero `"MARIA TOJORON"` no coincide con `"MARIA TOJ"`.
 
 ## Escenarios controlados
 
 - Array vacio o JSON/formato invalido.
 - Timeout, error de red y estado HTTP no exitoso.
-- Operaciones con `Ejecutado !== true`.
-- Nombres de cliente diferentes.
-- Solo abono a prestamo.
+- Operaciones con `Ejecutado !== true`; la operacion no se ignora y no se emite snapshot.
+- Abono cuyo nombre normalizado no corresponde a ninguna emision.
+- Dos emisiones con el mismo nombre normalizado o dos abonos para el mismo nombre.
+- Solo abono a prestamo; la solicitud no procede porque no contiene una emision valida.
 - Formas de desembolso desconocidas.
-- Metodologia grupal sin regla financiera confirmada.
 
 La API devuelve codigos diferenciados y mensajes aptos para interfaz sin exponer respuestas completas ni datos internos.
 
@@ -102,9 +104,6 @@ El endpoint institucional disponible actualmente usa HTTP sin cifrado. Planilla 
 
 Por definicion del proceso institucional, las consultas no estan restringidas por agencia. Un usuario autorizado puede consultar cualquier numero de solicitud valido. Al enviar, la agencia se obtiene del asistente autenticado para identificar la procedencia de la planilla; no autoriza ni restringe la consulta de una solicitud.
 
-## Pendiente de confirmacion del ingeniero
+## Datos observados
 
-1. Como procesar una distribucion que tenga unicamente Abono a prestamo.
-2. Confirmacion definitiva de `Ejecutado === true` como estado final requerido.
-3. Que campo relaciona un `AbonoAPrestamo` con su `EmisionDeCheque` en una distribucion grupal.
-4. Confirmacion contractual de que `ID` es estable entre consultas y representa de forma permanente la identidad de la emision. La implementacion exige que este presente y no se repita dentro de la respuesta.
+Las muestras documentadas y fixtures existentes entregan `NombreEnCheque` como texto, habitualmente en mayusculas. No se conto con una muestra institucional real de solicitud grupal con abonos durante esta correccion; esa combinacion se valida con fixtures que conservan exactamente la estructura documentada del Web Service.
