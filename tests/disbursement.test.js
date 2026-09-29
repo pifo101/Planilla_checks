@@ -20,6 +20,28 @@ function assertKnownResult(result, expected) {
   assert.equal(result.fechaExtraccion, extractionDate);
 }
 
+function groupCheque(id, name, overrides = {}) {
+  return {
+    ...structuredClone(fixtures.individualWithLoanPayment[1]),
+    ID: id,
+    NombreEnCheque: name,
+    OrdenPago: 13000 + Number(id),
+    Gasto01: 100,
+    ValorNeto: 1900,
+    ...overrides,
+  };
+}
+
+function loanPayment(name, overrides = {}) {
+  return {
+    ...structuredClone(fixtures.individualWithLoanPayment[0]),
+    ID: overrides.ID ?? 90000,
+    NombreEnCheque: name,
+    ValorNeto: 500,
+    ...overrides,
+  };
+}
+
 test('normaliza una distribucion individual mixta sin depender del orden del arreglo', () => {
   const result = normalize([...fixtures.individualWithLoanPayment].reverse());
 
@@ -55,7 +77,7 @@ test('acepta FormaDesembolso numerico 3 como abono reconocido', () => {
   const abono = structuredClone(fixtures.onlyLoanPayment[0]);
   assert.equal(abono.FormaDesembolso, 3);
   const result = normalize([abono]);
-  assert.equal(result.reason, 'ONLY_LOAN_PAYMENT_UNCONFIRMED');
+  assert.equal(result.reason, 'ONLY_LOAN_PAYMENT');
 });
 
 test('normaliza una distribucion individual pequena', () => {
@@ -85,11 +107,12 @@ test('normaliza una distribucion individual grande', () => {
   });
 });
 
-test('marca solo abono como escenario no confirmado', () => {
+test('rechaza solo abono porque no contiene una emision de cheque valida', () => {
   const result = normalize(fixtures.onlyLoanPayment);
 
   assert.equal(result.supported, false);
-  assert.equal(result.reason, 'ONLY_LOAN_PAYMENT_UNCONFIRMED');
+  assert.equal(result.reason, 'ONLY_LOAN_PAYMENT');
+  assert.match(result.warnings[0], /no contiene una emision de cheque valida/i);
   assert.equal(result.montoAprobado, null);
 });
 
@@ -107,18 +130,37 @@ test('rechaza una respuesta que no es arreglo', () => {
   );
 });
 
-test('marca operaciones no ejecutadas como no finales', () => {
+test('rechaza explicitamente un abono individual no ejecutado', () => {
   const fixture = structuredClone(fixtures.individualWithLoanPayment);
   fixture[0].Ejecutado = false;
 
-  assert.equal(normalize(fixture).reason, 'NON_FINAL_DISTRIBUTION');
+  const result = normalize(fixture);
+  assert.equal(result.reason, 'DISBURSEMENT_NOT_EXECUTED');
+  assert.match(result.warnings[0], /no ejecutadas/i);
 });
 
-test('no elige silenciosamente entre nombres distintos', () => {
+test('rechaza explicitamente una emision individual no ejecutada', () => {
   const fixture = structuredClone(fixtures.individualWithLoanPayment);
-  fixture[1].NombreEnCheque = 'OTRA PERSONA';
+  fixture[1].Ejecutado = false;
 
-  assert.equal(normalize(fixture).reason, 'MULTIPLE_CLIENT_NAMES');
+  assert.equal(normalize(fixture).reason, 'DISBURSEMENT_NOT_EXECUTED');
+});
+
+test('rechaza un abono individual con nombre diferente a la emision', () => {
+  const fixture = structuredClone(fixtures.individualWithLoanPayment);
+  fixture[0].NombreEnCheque = 'CLIENTE PRUEBA';
+
+  assert.equal(normalize(fixture).reason, 'LOAN_PAYMENT_WITHOUT_CHECK');
+});
+
+test('asocia nombres individuales ignorando case y espacios irrelevantes', () => {
+  const fixture = structuredClone(fixtures.individualWithLoanPayment);
+  fixture[0].NombreEnCheque = '  cliente   prueba uno  ';
+
+  const result = normalize(fixture);
+  assert.equal(result.supported, true);
+  assert.equal(result.cliente, 'CLIENTE PRUEBA UNO');
+  assert.equal(result.montoCancelado, 100);
 });
 
 test('usa solo Gasto01 del cheque aunque Gasto02-Gasto10 tengan valores', () => {
@@ -170,14 +212,7 @@ test('no calcula un grupo cuyos miembros no tienen identidad confirmada', () => 
 });
 
 test('convierte N emisiones identificadas sin abonos en N miembros calculados', () => {
-  const fixture = [1, 2, 3].map((id) => ({
-    ...structuredClone(fixtures.individualWithLoanPayment[1]),
-    ID: 19000 + id,
-    NombreEnCheque: `MIEMBRO ${id}`,
-    OrdenPago: 13000 + id,
-    Gasto01: 100,
-    ValorNeto: 1900,
-  }));
+  const fixture = [1, 2, 3].map((id) => groupCheque(19000 + id, `MIEMBRO ${id}`));
   const result = normalize(fixture);
 
   assert.equal(result.supported, true);
@@ -188,16 +223,99 @@ test('convierte N emisiones identificadas sin abonos en N miembros calculados', 
   assert.ok(result.miembros.every((item) => item.calculado && item.montoAprobado === 2000));
 });
 
-test('no inventa asociacion de abonos para miembros grupales', () => {
-  const cheques = [1, 2].map((id) => ({
-    ...structuredClone(fixtures.individualWithLoanPayment[1]),
-    ID: 19000 + id,
-    NombreEnCheque: `MIEMBRO ${id}`,
-  }));
-  const result = normalize([...cheques, structuredClone(fixtures.individualWithLoanPayment[0])]);
+test('asocia cada abono grupal por NombreEnCheque sin depender del orden', () => {
+  const cheques = [groupCheque(19001, 'MARIA TOJORON'), groupCheque(19002, 'JUAN PEREZ')];
+  const result = normalize([
+    loanPayment('  juan   perez ', { ValorNeto: 700 }),
+    ...cheques,
+    loanPayment('Maria Tojoron', { ValorNeto: 500 }),
+  ]);
 
-  assert.equal(result.reason, 'GROUPED_LOAN_PAYMENT_ASSOCIATION_UNCONFIRMED');
-  assert.ok(result.miembros.every((item) => item.calculado === false && item.montoAprobado === null));
+  assert.equal(result.supported, true);
+  assert.deepEqual(result.miembros.map((item) => item.miembroId), ['19001', '19002']);
+  assert.deepEqual(result.miembros.map((item) => item.montoCancelado), [500, 700]);
+  assert.deepEqual(result.miembros.map((item) => item.montoAprobado), [2500, 2700]);
+});
+
+test('permite un grupo donde solo algunos miembros tienen abono', () => {
+  const result = normalize([
+    groupCheque(19001, 'MIEMBRO A'),
+    loanPayment('MIEMBRO A', { ValorNeto: 500 }),
+    groupCheque(19002, 'MIEMBRO B'),
+    groupCheque(19003, 'MIEMBRO C'),
+  ]);
+
+  assert.equal(result.supported, true);
+  assert.deepEqual(result.miembros.map((item) => item.montoCancelado), [500, 0, 0]);
+  assert.deepEqual(result.miembros.map((item) => item.montoAprobado), [2500, 2000, 2000]);
+});
+
+test('rechaza un abono grupal sin emision correspondiente', () => {
+  const result = normalize([
+    groupCheque(19001, 'MIEMBRO A'),
+    groupCheque(19002, 'MIEMBRO B'),
+    loanPayment('MIEMBRO C'),
+  ]);
+
+  assert.equal(result.reason, 'LOAN_PAYMENT_WITHOUT_CHECK');
+  assert.ok(result.miembros.every((item) => !item.calculado));
+});
+
+test('rechaza emisiones grupales con el mismo nombre normalizado', () => {
+  const result = normalize([
+    groupCheque(19001, ' MARIA   TOJORON '),
+    groupCheque(19002, 'Maria Tojoron'),
+  ]);
+
+  assert.equal(result.reason, 'GROUP_MEMBER_NAME_AMBIGUOUS');
+  assert.ok(result.miembros.every((item) => !item.calculado));
+});
+
+test('rechaza dos abonos para el mismo nombre normalizado', () => {
+  const result = normalize([
+    groupCheque(19001, 'MIEMBRO A'),
+    groupCheque(19002, 'MIEMBRO B'),
+    loanPayment('MIEMBRO A'),
+    loanPayment(' miembro   a '),
+  ]);
+
+  assert.equal(result.reason, 'LOAN_PAYMENT_NAME_AMBIGUOUS');
+  assert.ok(result.miembros.every((item) => !item.calculado));
+});
+
+test('rechaza el grupo completo cuando cualquier registro no fue ejecutado', () => {
+  const result = normalize([
+    groupCheque(19001, 'MIEMBRO A'),
+    groupCheque(19002, 'MIEMBRO B'),
+    loanPayment('MIEMBRO A', { Ejecutado: false }),
+  ]);
+
+  assert.equal(result.reason, 'DISBURSEMENT_NOT_EXECUTED');
+  assert.equal(result.miembros, undefined);
+});
+
+test('en grupo usa Gasto01 del cheque e ignora todos los gastos del abono y Gasto02-Gasto10', () => {
+  const chequeA = groupCheque(19001, 'MIEMBRO A', { Gasto01: 125, ValorNeto: 1875 });
+  const chequeB = groupCheque(19002, 'MIEMBRO B');
+  const abono = loanPayment('MIEMBRO A', { ValorNeto: 500, Gasto01: 999 });
+  for (let expenseNumber = 2; expenseNumber <= 10; expenseNumber += 1) {
+    const field = `Gasto${String(expenseNumber).padStart(2, '0')}`;
+    chequeA[field] = expenseNumber * 100;
+    abono[field] = expenseNumber * 200;
+  }
+  const result = normalize([chequeA, abono, chequeB]);
+
+  assert.equal(result.supported, true);
+  assert.deepEqual(result.miembros[0], {
+    miembroId: '19001',
+    cliente: 'MIEMBRO A',
+    montoAprobado: 2500,
+    montoCancelado: 500,
+    descuentos: 125,
+    montoCheque: 1875,
+    ordenPago: 32001,
+    calculado: true,
+  });
 });
 
 test('identifica datos incompletos de un miembro grupal', () => {
@@ -210,7 +328,7 @@ test('identifica datos incompletos de un miembro grupal', () => {
 
   assert.equal(result.supported, false);
   assert.equal(result.reason, 'GROUPED_MEMBER_DATA_INVALID');
-  assert.equal(result.miembros[0].calculado, true);
+  assert.equal(result.miembros[0].calculado, false);
   assert.equal(result.miembros[1].calculado, false);
 });
 

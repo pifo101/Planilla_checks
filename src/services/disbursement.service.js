@@ -125,20 +125,73 @@ function memberId(value) {
   return normalized.length <= 100 ? normalized : null;
 }
 
+function normalizeCheckName(value) {
+  const displayName = String(value || '').trim().replace(/\s+/g, ' ');
+  return {
+    displayName,
+    key: displayName.toUpperCase(),
+  };
+}
+
+function indexByCheckName(items) {
+  const indexed = new Map();
+  for (const item of items) {
+    const name = normalizeCheckName(item.NombreEnCheque);
+    const matches = indexed.get(name.key) || [];
+    matches.push(item);
+    indexed.set(name.key, matches);
+  }
+  return indexed;
+}
+
+function associationIssue(cheques, abonos, { grouped = false } = {}) {
+  const chequesByName = indexByCheckName(cheques);
+  const abonosByName = indexByCheckName(abonos);
+
+  if ([...chequesByName.values()].some((matches) => matches.length > 1)) {
+    return grouped ? 'GROUP_MEMBER_NAME_AMBIGUOUS' : 'UNSUPPORTED_DISTRIBUTION';
+  }
+  if ([...abonosByName.values()].some((matches) => matches.length > 1)) {
+    return 'LOAN_PAYMENT_NAME_AMBIGUOUS';
+  }
+  if ([...abonosByName.keys()].some((name) => !name || !chequesByName.has(name))) {
+    return 'LOAN_PAYMENT_WITHOUT_CHECK';
+  }
+  return null;
+}
+
+function calculatedAmounts(cheque, abono) {
+  const descuentosCents = toCents(cheque.Gasto01, 'Gasto01', { required: true });
+  const montoChequeCents = toCents(cheque.ValorNeto, 'ValorNeto', { required: true });
+  const montoCanceladoCents = abono
+    ? toCents(abono.ValorNeto, 'ValorNeto', { required: true })
+    : 0;
+
+  return {
+    montoAprobado: fromCents(addCents(montoCanceladoCents, descuentosCents, montoChequeCents)),
+    montoCancelado: fromCents(montoCanceladoCents),
+    descuentos: fromCents(descuentosCents),
+    montoCheque: fromCents(montoChequeCents),
+  };
+}
+
 function groupedResult(result) {
   const ids = result.cheques.map((cheque) => memberId(cheque.ID));
   const uniqueIds = new Set(ids);
   const hasConfirmedIdentity = ids.every(Boolean) && uniqueIds.size === ids.length;
-  const hasLoanPayments = result.abonos.length > 0;
-  const hasCompleteMemberData = result.cheques.every((cheque) => String(cheque.NombreEnCheque || '').trim());
+  const hasCompleteMemberData = result.cheques.every((cheque) => normalizeCheckName(cheque.NombreEnCheque).key);
+  const associationReason = hasCompleteMemberData
+    ? associationIssue(result.cheques, result.abonos, { grouped: true })
+    : null;
   const reason = !hasConfirmedIdentity
     ? 'GROUPED_MEMBER_IDENTITY_UNCONFIRMED'
     : !hasCompleteMemberData ? 'GROUPED_MEMBER_DATA_INVALID'
-    : hasLoanPayments ? 'GROUPED_LOAN_PAYMENT_ASSOCIATION_UNCONFIRMED' : null;
+      : associationReason;
+  const abonosByName = indexByCheckName(result.abonos);
 
   const miembros = result.cheques.map((cheque, index) => {
-    const cliente = String(cheque.NombreEnCheque || '').trim();
-    const calculado = hasConfirmedIdentity && !hasLoanPayments && Boolean(cliente);
+    const { displayName: cliente, key: clientKey } = normalizeCheckName(cheque.NombreEnCheque);
+    const calculado = !reason;
     if (!calculado) {
       return {
         miembroId: ids[index],
@@ -152,15 +205,11 @@ function groupedResult(result) {
       };
     }
 
-    const descuentosCents = toCents(cheque.Gasto01, 'Gasto01', { required: true });
-    const montoChequeCents = toCents(cheque.ValorNeto, 'ValorNeto', { required: true });
+    const abono = abonosByName.get(clientKey)?.[0];
     return {
       miembroId: ids[index],
       cliente,
-      montoAprobado: fromCents(addCents(descuentosCents, montoChequeCents)),
-      montoCancelado: 0,
-      descuentos: fromCents(descuentosCents),
-      montoCheque: fromCents(montoChequeCents),
+      ...calculatedAmounts(cheque, abono),
       ordenPago: cheque.OrdenPago ?? null,
       calculado: true,
     };
@@ -176,9 +225,13 @@ function groupedResult(result) {
       ? ['Cada emision grupal necesita un ID unico para identificar al miembro.']
       : reason === 'GROUPED_MEMBER_DATA_INVALID'
         ? ['Cada emision grupal necesita un nombre de cliente.']
-      : reason === 'GROUPED_LOAN_PAYMENT_ASSOCIATION_UNCONFIRMED'
-        ? ['No existe una relacion confirmada entre los abonos y las emisiones del grupo.']
-        : [],
+        : reason === 'GROUP_MEMBER_NAME_AMBIGUOUS'
+          ? ['Dos o mas emisiones tienen el mismo nombre de cheque y no permiten asociar abonos de forma inequivoca.']
+          : reason === 'LOAN_PAYMENT_NAME_AMBIGUOUS'
+            ? ['Existen varios abonos para el mismo nombre de cheque.']
+            : reason === 'LOAN_PAYMENT_WITHOUT_CHECK'
+              ? ['Existe un abono sin una emision de cheque correspondiente para el mismo nombre.']
+              : [],
   };
 }
 
@@ -216,8 +269,8 @@ function normalizeDisbursement(distribuciones, { fechaExtraccion = new Date() } 
   if (distribuciones.some((item) => item.Ejecutado !== true)) {
     return unsupported(
       result,
-      'NON_FINAL_DISTRIBUTION',
-      ['Se detectaron operaciones que no estan marcadas como ejecutadas.'],
+      'DISBURSEMENT_NOT_EXECUTED',
+      ['El desembolso contiene operaciones no ejecutadas y la solicitud no puede agregarse.'],
     );
   }
 
@@ -232,48 +285,36 @@ function normalizeDisbursement(distribuciones, { fechaExtraccion = new Date() } 
 
   if (result.cheques.length >= 2) return groupedResult(result);
 
-  const clientNames = [...new Set(
-    distribuciones
-      .map((item) => String(item.NombreEnCheque || '').trim())
-      .filter(Boolean),
-  )];
-
-  if (clientNames.length !== 1) {
-    return unsupported(
-      result,
-      'MULTIPLE_CLIENT_NAMES',
-      ['No se pudo determinar un unico nombre de cliente en la distribucion.'],
-    );
-  }
-  result.cliente = clientNames[0];
-
   if (result.cheques.length === 0 && result.abonos.length > 0) {
     return unsupported(
       result,
-      'ONLY_LOAN_PAYMENT_UNCONFIRMED',
-      ['La distribucion contiene solamente abonos a prestamo.'],
+      'ONLY_LOAN_PAYMENT',
+      ['La solicitud no procede porque no contiene una emision de cheque valida.'],
     );
   }
 
-  if (result.cheques.length !== 1 || result.abonos.length > 1) {
+  if (result.cheques.length !== 1) {
     return unsupported(result, 'UNSUPPORTED_DISTRIBUTION');
   }
 
   const cheque = result.cheques[0];
-  const abono = result.abonos[0];
-  const montoChequeCents = toCents(cheque.ValorNeto, 'ValorNeto', { required: true });
-  const descuentosCents = toCents(cheque.Gasto01, 'Gasto01', { required: true });
-  const montoCanceladoCents = abono
-    ? toCents(abono.ValorNeto, 'ValorNeto', { required: true })
-    : 0;
+  const { displayName: cliente, key: clientKey } = normalizeCheckName(cheque.NombreEnCheque);
+  if (!clientKey) {
+    return unsupported(result, 'INVALID_CLIENT_NAME', ['La emision de cheque no contiene un nombre de cliente valido.']);
+  }
+  const associationReason = associationIssue(result.cheques, result.abonos);
+  if (associationReason) {
+    return unsupported(result, associationReason, [associationReason === 'LOAN_PAYMENT_NAME_AMBIGUOUS'
+      ? 'Existen varios abonos para el mismo nombre de cheque.'
+      : 'Existe un abono que no corresponde al nombre de la emision de cheque.']);
+  }
+  const abono = indexByCheckName(result.abonos).get(clientKey)?.[0];
+  result.cliente = cliente;
 
   const { cheques, abonos, ...normalized } = result;
   return {
     ...normalized,
-    montoAprobado: fromCents(addCents(montoCanceladoCents, descuentosCents, montoChequeCents)),
-    montoCancelado: fromCents(montoCanceladoCents),
-    descuentos: fromCents(descuentosCents),
-    montoCheque: fromCents(montoChequeCents),
+    ...calculatedAmounts(cheque, abono),
     numeroCredito: abono ? String(abono.NumeroCredito || '').trim() || null : null,
     ordenPago: cheque.OrdenPago ?? null,
     supported: true,

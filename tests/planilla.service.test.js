@@ -249,13 +249,13 @@ test('rechaza roles distintos de ASISTENTE y asistentes sin agencia', async () =
 test('rechaza solicitudes y cheques ya persistidos antes de insertar', async () => {
   planillaRepository.findSolicitudUsage = async () => ({ solicitudUtilizada: true, chequeUtilizado: false });
   await assert.rejects(
-    createPlanilla(user, submission()),
+    createPlanilla(user, submission(), { now: () => now }),
     (error) => error.code === 'REQUEST_ALREADY_USED' && error.status === 409,
   );
 
   planillaRepository.findSolicitudUsage = async () => ({ solicitudUtilizada: false, chequeUtilizado: true });
   await assert.rejects(
-    createPlanilla(user, submission()),
+    createPlanilla(user, submission(), { now: () => now }),
     (error) => error.code === 'CHECK_ALREADY_USED' && error.status === 409,
   );
 });
@@ -272,7 +272,7 @@ for (const [constraint, expectedCode] of [
       throw error;
     };
     await assert.rejects(
-      createPlanilla(user, submission()),
+      createPlanilla(user, submission(), { now: () => now }),
       (error) => error.code === expectedCode && error.status === 409 && !/constraint|dbo/i.test(error.message),
     );
   });
@@ -292,7 +292,10 @@ test('reintenta una colision del codigo generado sin repetir la persistencia exi
   };
 
   const codes = ['PLN-PRIMERO', 'PLN-SEGUNDO'];
-  const result = await createPlanilla(user, submission(), { generateCode: () => codes.shift() });
+  const result = await createPlanilla(user, submission(), {
+    now: () => now,
+    generateCode: () => codes.shift(),
+  });
   assert.equal(attempts, 2);
   assert.equal(result.codigo, 'PLN-SEGUNDO');
 });
