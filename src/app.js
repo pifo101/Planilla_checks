@@ -64,6 +64,18 @@ app.use((error, req, res, next) => {
   }
 
   if (req.originalUrl.startsWith('/api/')) {
+    if (error.type === 'entity.parse.failed') {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_JSON', message: 'El cuerpo de la peticion contiene JSON invalido.' },
+      });
+    }
+    if (error.type === 'entity.too.large') {
+      return res.status(413).json({
+        success: false,
+        error: { code: 'REQUEST_TOO_LARGE', message: 'El cuerpo de la peticion excede el limite permitido.' },
+      });
+    }
     return res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Error interno del servidor.' },
