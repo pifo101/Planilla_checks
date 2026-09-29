@@ -6,7 +6,7 @@ Antes de agregar, Planilla Checks consulta SQL Server para comprobar que el nume
 
 Reglas del flujo:
 
-1. El numero de solicitud no puede repetirse despues de haber sido enviado en una planilla.
+1. Una solicitud individual no puede repetirse despues de haber sido enviada. En una solicitud grupal, cada `ID` de emision puede persistirse una sola vez para el mismo numero de solicitud.
 2. El numero de cheque debe ser unico y nunca reutilizarse.
 3. Las consultas de distribucion de desembolso no estan restringidas por agencia. Un usuario autorizado puede consultar cualquier numero de solicitud valido.
 4. La agencia y el usuario creador se obtienen de la sesion autenticada; nunca se aceptan IDs arbitrarios del navegador.
@@ -28,10 +28,14 @@ Reglas del flujo:
 15. El envio admite como maximo tecnico 100 solicitudes por peticion. Este limite protege el servicio y no representa una regla funcional definitiva.
 16. El backend emite un snapshot firmado de cada consulta valida. Al enviar, verifica que pertenezca al usuario, que no haya vencido y que sus importes en centavos cumplan `montoAprobado = montoCancelado + descuentos + montoCheque`.
 17. La comprobacion previa de disponibilidad mejora la respuesta al usuario, pero los constraints UNIQUE de SQL Server son la defensa final ante concurrencia.
+18. Cada emision de cheque de una solicitud grupal representa un miembro y genera un cuadro y una fila independientes.
+19. Un grupo sin abonos se calcula por emision. Si el grupo contiene abonos, no se asocian por posicion ni por heuristicas: el calculo queda no confirmado y el grupo no puede enviarse.
+20. Todos los miembros de un grupo calculado se agregan y envian juntos. Cada uno requiere un numero de cheque distinto.
 
 ## Pendientes de confirmacion del ingeniero
 
 1. Como representar una distribucion que contiene unicamente Abono a prestamo. Actualmente se detecta como no soportada y no se guarda.
 2. Confirmacion definitiva de que `Ejecutado === true` representa el estado final requerido. Por seguridad, actualmente se rechaza cualquier otro valor.
-3. Como agregar los montos de una distribucion grupal. La metodologia se identifica, pero sus montos no se calculan ni se guardan.
-4. El historial real y el flujo de recepcion/procesamiento de Contabilidad. Las planillas enviadas ya quedan persistidas, pero esas interfaces siguen fuera de alcance.
+3. Que clave relaciona un abono con una emision especifica cuando una distribucion grupal contiene ambos tipos.
+4. Confirmacion contractual de estabilidad del campo `ID` de la emision, observado como unico y estable en consultas repetidas.
+5. El historial real y el flujo de recepcion/procesamiento de Contabilidad. Las planillas enviadas ya quedan persistidas, pero esas interfaces siguen fuera de alcance.

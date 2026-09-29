@@ -27,6 +27,7 @@ async function insertSolicitud(transaction, planillaId, solicitud) {
   const result = await new sql.Request(transaction)
     .input('planillaId', sql.BigInt, planillaId)
     .input('numeroSolicitud', sql.NVarChar(50), solicitud.numeroSolicitud)
+    .input('miembroId', sql.NVarChar(100), solicitud.miembroId || null)
     .input('nombreCliente', sql.NVarChar(200), solicitud.nombreCliente)
     .input('montoAprobado', sql.Decimal(18, 2), solicitud.montoAprobado)
     .input('montoCancelado', sql.Decimal(18, 2), solicitud.montoCancelado || 0)
@@ -38,14 +39,14 @@ async function insertSolicitud(transaction, planillaId, solicitud) {
     .input('estado', sql.VarChar(20), solicitud.estado || 'PENDIENTE')
     .query(`
       INSERT INTO dbo.solicitudes_planilla (
-        planilla_id, numero_solicitud, nombre_cliente, monto_aprobado,
+        planilla_id, numero_solicitud, miembro_id, nombre_cliente, monto_aprobado,
         monto_cancelado, descuentos, monto_cheque, numero_cheque,
         metodologia, fecha_extraccion, estado
       )
       OUTPUT inserted.id, inserted.numero_solicitud AS numeroSolicitud,
              inserted.numero_cheque AS numeroCheque
       VALUES (
-        @planillaId, @numeroSolicitud, @nombreCliente, @montoAprobado,
+        @planillaId, @numeroSolicitud, @miembroId, @nombreCliente, @montoAprobado,
         @montoCancelado, @descuentos, @montoCheque, @numeroCheque,
         @metodologia, @fechaExtraccion, @estado
       );
@@ -126,7 +127,8 @@ async function findDetail(id) {
     INNER JOIN dbo.usuarios AS u ON u.id = p.creada_por_usuario_id
     WHERE p.id = @id;
 
-    SELECT id, numero_solicitud AS numeroSolicitud, nombre_cliente AS nombreCliente,
+    SELECT id, numero_solicitud AS numeroSolicitud, miembro_id AS miembroId,
+           nombre_cliente AS nombreCliente,
            monto_aprobado AS montoAprobado, monto_cancelado AS montoCancelado,
            descuentos, monto_cheque AS montoCheque, numero_cheque AS numeroCheque,
            metodologia, fecha_extraccion AS fechaExtraccion, estado, procesado,

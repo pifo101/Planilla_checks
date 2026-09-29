@@ -43,7 +43,7 @@ La disponibilidad se consulta con `GET /api/solicitudes/:numeroSolicitud/disponi
 
 ## Envio de planilla
 
-`POST /api/planillas` requiere una sesion activa con rol `ASISTENTE`. El body contiene un arreglo `solicitudes` de entre 1 y 100 elementos. Cada elemento envia `numeroSolicitud`, `numeroCheque` y el `submissionToken` firmado que el backend genero al normalizar la consulta.
+`POST /api/planillas` requiere una sesion activa con rol `ASISTENTE`. El body contiene un arreglo `solicitudes` de entre 1 y 100 elementos. Cada elemento envia `numeroSolicitud`, `numeroCheque` y el `submissionToken` firmado que el backend genero al normalizar la consulta. Los miembros grupales tambien envian su `miembroId` protegido por el snapshot y el grupo debe enviarse completo. Todos los tokens del grupo contienen la misma huella firmada de identidades y fecha de extraccion, por lo que no pueden mezclarse miembros obtenidos en consultas distintas.
 
 El navegador no envia como autoridad el usuario, agencia, codigo, estado, fechas, cliente, metodologia ni montos libres. El token esta ligado al usuario, vence a las ocho horas y protege el snapshot normalizado contra alteraciones. El backend toma usuario y agencia de la sesion revalidada, genera un codigo `PLN-<UUID>`, fuerza el estado `ENVIADA` y genera las fechas. Tambien valida duplicados internos, disponibilidad, metodologia `INDIVIDUAL`, montos enteros no negativos y coherencia financiera. No vuelve a llamar al Web Service institucional durante el POST.
 
@@ -55,7 +55,8 @@ Los prechecks no sustituyen las restricciones UNIQUE de SQL Server. Si otra peti
 
 - `FormaDesembolso = 1`: Emision de cheque.
 - `FormaDesembolso = 3`: Abono a prestamo.
-- `NombreEnCheque`: nombre del cliente; todos los registros deben coincidir.
+- `ID`: identifica una emision y se conserva como identidad tecnica del miembro grupal. Debe existir y ser unico dentro de la respuesta.
+- `NombreEnCheque`: nombre del cliente. En una solicitud grupal pertenece al miembro de cada emision.
 - `ValorNeto`: monto del cheque o del abono segun su forma.
 - `Gasto01`: se usa como descuento solamente cuando pertenece a una Emision de cheque; en un Abono a prestamo se ignora, incluso si es distinto de cero.
 - `NumeroCredito`: se conserva desde el abono.
@@ -81,7 +82,7 @@ montoAprobado  = montoCancelado + descuentos + montoCheque
 
 Los importes se convierten a centavos enteros antes de sumarlos y se devuelven con dos decimales. La fecha de extraccion la genera Planilla Checks al recibir correctamente la respuesta.
 
-`cantidadCheques` cuenta solo elementos con `FormaDesembolso = 1`. Una emision produce metodologia `INDIVIDUAL`; dos o mas producen `GRUPAL`. La suma financiera grupal no esta confirmada, por lo que esas respuestas no se calculan ni se guardan.
+`cantidadCheques` cuenta solo elementos con `FormaDesembolso = 1`. Una emision produce metodologia `INDIVIDUAL`; dos o mas producen `GRUPAL`, y cada emision produce un miembro/cuadro. Un grupo sin abonos se calcula por emision usando `montoCancelado = 0`, `descuentos = Gasto01` y `montoCheque = ValorNeto`. Si existe cualquier abono grupal, no se asigna a ningun miembro porque el contrato disponible no contiene una relacion confirmada; los miembros se muestran con calculo no confirmado y no pueden guardarse.
 
 ## Escenarios controlados
 
@@ -105,4 +106,5 @@ Por definicion del proceso institucional, las consultas no estan restringidas po
 
 1. Como procesar una distribucion que tenga unicamente Abono a prestamo.
 2. Confirmacion definitiva de `Ejecutado === true` como estado final requerido.
-3. Como agregar montos cuando existen varias emisiones de cheque.
+3. Que campo relaciona un `AbonoAPrestamo` con su `EmisionDeCheque` en una distribucion grupal.
+4. Confirmacion contractual de que `ID` es estable entre consultas y representa de forma permanente la identidad de la emision. La implementacion exige que este presente y no se repita dentro de la respuesta.

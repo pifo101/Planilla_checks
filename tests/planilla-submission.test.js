@@ -50,6 +50,11 @@ test('envia una sola peticion POST y devuelve la confirmacion persistida', async
   assert.equal(submitter.isPending(), false);
 });
 
+test('incluye la identidad protegida de miembros grupales', () => {
+  const request = { ...draftRequest(), miembroId: '19536', metodologia: 'GRUPAL' };
+  assert.equal(buildSubmission([request]).solicitudes[0].miembroId, '19536');
+});
+
 test('bloquea un segundo envio mientras el primero esta pendiente', async () => {
   let resolveFetch;
   let calls = 0;

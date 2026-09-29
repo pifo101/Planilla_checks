@@ -94,12 +94,18 @@ function normalizeSolicitud(solicitud, userId, now) {
 
   const nombreCliente = requireText(snapshot.cliente, 'cliente', 200);
   const metodologia = requireText(snapshot.metodologia, 'metodologia', 100);
-  if (metodologia !== 'INDIVIDUAL') {
+  if (!['INDIVIDUAL', 'GRUPAL'].includes(metodologia)) {
     throw new PlanillaError(
       'UNSUPPORTED_METHODOLOGY',
-      'Solo pueden enviarse solicitudes con metodologia INDIVIDUAL.',
+      'La metodologia de la solicitud no esta soportada.',
       422,
     );
+  }
+  const miembroId = metodologia === 'GRUPAL'
+    ? requireText(snapshot.miembroId, 'miembroId', 100)
+    : null;
+  if (metodologia === 'GRUPAL' && String(solicitud.miembroId || '').trim() !== miembroId) {
+    throw new PlanillaError('INVALID_SUBMISSION_TOKEN', 'El token no corresponde al miembro enviado.');
   }
 
   const montoAprobadoCents = requireCents(snapshot.montoAprobadoCentavos, 'montoAprobadoCentavos');
@@ -117,6 +123,11 @@ function normalizeSolicitud(solicitud, userId, now) {
 
   return {
     numeroSolicitud,
+    ...(metodologia === 'GRUPAL' ? {
+      miembroId,
+      cantidadMiembros: snapshot.cantidadMiembros,
+      grupoFingerprint: requireText(snapshot.grupoFingerprint, 'grupoFingerprint', 64),
+    } : {}),
     nombreCliente,
     numeroCheque,
     metodologia,
@@ -147,9 +158,11 @@ function validateSubmission(submission, { userId, now } = {}) {
 
   const solicitudes = submission.solicitudes.map((solicitud) => normalizeSolicitud(solicitud, userId, now));
   const requestNumbers = new Set();
+  const memberKeys = new Set();
   const checkNumbers = new Set();
   for (const solicitud of solicitudes) {
-    if (requestNumbers.has(solicitud.numeroSolicitud)) {
+    const requestSeen = requestNumbers.has(solicitud.numeroSolicitud);
+    if (requestSeen && solicitud.metodologia !== 'GRUPAL') {
       throw new PlanillaError(
         'DUPLICATE_REQUEST_IN_SUBMISSION',
         'La peticion contiene un numero de solicitud repetido.',
@@ -157,6 +170,12 @@ function validateSubmission(submission, { userId, now } = {}) {
       );
     }
     requestNumbers.add(solicitud.numeroSolicitud);
+
+    const memberKey = `${solicitud.numeroSolicitud}\u0000${solicitud.miembroId || ''}`;
+    if (memberKeys.has(memberKey)) {
+      throw new PlanillaError('DUPLICATE_GROUP_MEMBER_IN_SUBMISSION', 'La peticion contiene un miembro grupal repetido.', 409);
+    }
+    memberKeys.add(memberKey);
 
     const checkKey = solicitud.numeroCheque.toUpperCase();
     if (checkNumbers.has(checkKey)) {
@@ -167,6 +186,23 @@ function validateSubmission(submission, { userId, now } = {}) {
       );
     }
     checkNumbers.add(checkKey);
+  }
+
+  for (const numeroSolicitud of requestNumbers) {
+    const group = solicitudes.filter((item) => item.numeroSolicitud === numeroSolicitud);
+    if (group.some((item) => item.metodologia === 'GRUPAL')) {
+      const expected = group[0].cantidadMiembros;
+      const fingerprint = group[0].grupoFingerprint;
+      if (group.some((item) => item.metodologia !== 'GRUPAL' || item.cantidadMiembros !== expected)
+          || group.some((item) => item.grupoFingerprint !== fingerprint)
+          || group.length !== expected) {
+        throw new PlanillaError(
+          'INCOMPLETE_GROUP_SUBMISSION',
+          'La solicitud grupal debe enviarse con todos sus miembros en una sola planilla.',
+          422,
+        );
+      }
+    }
   }
   return solicitudes;
 }
@@ -183,6 +219,7 @@ function duplicateKind(error) {
   const details = sqlErrorDetails(error);
   if (!details.numbers.some((number) => DUPLICATE_SQL_NUMBERS.has(number))) return null;
   if (/UQ_solicitudes_numero_solicitud/i.test(details.message)) return 'REQUEST';
+  if (/UQ_solicitudes_numero_solicitud_miembro/i.test(details.message)) return 'REQUEST';
   if (/UQ_solicitudes_numero_cheque/i.test(details.message)) return 'CHECK';
   if (/UQ_planillas_codigo/i.test(details.message)) return 'CODE';
   return 'UNKNOWN';

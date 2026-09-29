@@ -119,6 +119,69 @@ function unsupported(result, reason, warnings = []) {
   return { ...publicResult, reason, warnings };
 }
 
+function memberId(value) {
+  if ((typeof value !== 'number' && typeof value !== 'string') || !String(value).trim()) return null;
+  const normalized = String(value).trim();
+  return normalized.length <= 100 ? normalized : null;
+}
+
+function groupedResult(result) {
+  const ids = result.cheques.map((cheque) => memberId(cheque.ID));
+  const uniqueIds = new Set(ids);
+  const hasConfirmedIdentity = ids.every(Boolean) && uniqueIds.size === ids.length;
+  const hasLoanPayments = result.abonos.length > 0;
+  const hasCompleteMemberData = result.cheques.every((cheque) => String(cheque.NombreEnCheque || '').trim());
+  const reason = !hasConfirmedIdentity
+    ? 'GROUPED_MEMBER_IDENTITY_UNCONFIRMED'
+    : !hasCompleteMemberData ? 'GROUPED_MEMBER_DATA_INVALID'
+    : hasLoanPayments ? 'GROUPED_LOAN_PAYMENT_ASSOCIATION_UNCONFIRMED' : null;
+
+  const miembros = result.cheques.map((cheque, index) => {
+    const cliente = String(cheque.NombreEnCheque || '').trim();
+    const calculado = hasConfirmedIdentity && !hasLoanPayments && Boolean(cliente);
+    if (!calculado) {
+      return {
+        miembroId: ids[index],
+        cliente: cliente || null,
+        montoAprobado: null,
+        montoCancelado: null,
+        descuentos: null,
+        montoCheque: null,
+        ordenPago: cheque.OrdenPago ?? null,
+        calculado: false,
+      };
+    }
+
+    const descuentosCents = toCents(cheque.Gasto01, 'Gasto01', { required: true });
+    const montoChequeCents = toCents(cheque.ValorNeto, 'ValorNeto', { required: true });
+    return {
+      miembroId: ids[index],
+      cliente,
+      montoAprobado: fromCents(addCents(descuentosCents, montoChequeCents)),
+      montoCancelado: 0,
+      descuentos: fromCents(descuentosCents),
+      montoCheque: fromCents(montoChequeCents),
+      ordenPago: cheque.OrdenPago ?? null,
+      calculado: true,
+    };
+  });
+
+  const { cheques, abonos, ...normalized } = result;
+  return {
+    ...normalized,
+    miembros,
+    supported: !reason && miembros.every((miembro) => miembro.calculado),
+    reason,
+    warnings: reason === 'GROUPED_MEMBER_IDENTITY_UNCONFIRMED'
+      ? ['Cada emision grupal necesita un ID unico para identificar al miembro.']
+      : reason === 'GROUPED_MEMBER_DATA_INVALID'
+        ? ['Cada emision grupal necesita un nombre de cliente.']
+      : reason === 'GROUPED_LOAN_PAYMENT_ASSOCIATION_UNCONFIRMED'
+        ? ['No existe una relacion confirmada entre los abonos y las emisiones del grupo.']
+        : [],
+  };
+}
+
 function normalizeDisbursement(distribuciones, { fechaExtraccion = new Date() } = {}) {
   if (!Array.isArray(distribuciones)) {
     throw new DisbursementError(
@@ -149,20 +212,6 @@ function normalizeDisbursement(distribuciones, { fechaExtraccion = new Date() } 
   }
 
   const result = baseResult(distribuciones, fechaExtraccion);
-  const clientNames = [...new Set(
-    distribuciones
-      .map((item) => String(item.NombreEnCheque || '').trim())
-      .filter(Boolean),
-  )];
-
-  if (clientNames.length !== 1) {
-    return unsupported(
-      result,
-      'MULTIPLE_CLIENT_NAMES',
-      ['No se pudo determinar un unico nombre de cliente en la distribucion.'],
-    );
-  }
-  result.cliente = clientNames[0];
 
   if (distribuciones.some((item) => item.Ejecutado !== true)) {
     return unsupported(
@@ -181,19 +230,28 @@ function normalizeDisbursement(distribuciones, { fechaExtraccion = new Date() } 
     );
   }
 
+  if (result.cheques.length >= 2) return groupedResult(result);
+
+  const clientNames = [...new Set(
+    distribuciones
+      .map((item) => String(item.NombreEnCheque || '').trim())
+      .filter(Boolean),
+  )];
+
+  if (clientNames.length !== 1) {
+    return unsupported(
+      result,
+      'MULTIPLE_CLIENT_NAMES',
+      ['No se pudo determinar un unico nombre de cliente en la distribucion.'],
+    );
+  }
+  result.cliente = clientNames[0];
+
   if (result.cheques.length === 0 && result.abonos.length > 0) {
     return unsupported(
       result,
       'ONLY_LOAN_PAYMENT_UNCONFIRMED',
       ['La distribucion contiene solamente abonos a prestamo.'],
-    );
-  }
-
-  if (result.cheques.length >= 2) {
-    return unsupported(
-      result,
-      'GROUPED_AMOUNT_CALCULATION_UNCONFIRMED',
-      ['La metodologia es grupal, pero el calculo de sus montos esta pendiente de confirmacion.'],
     );
   }
 
