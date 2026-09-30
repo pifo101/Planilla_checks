@@ -35,7 +35,7 @@ test('rechaza una conexion sin DB_DATABASE explicita', () => {
 });
 
 test('los scripts de esquema no cambian la base seleccionada por el operador', () => {
-  for (const file of ['002_create_tables.sql', '003_create_indexes.sql']) {
+  for (const file of ['002_create_tables.sql', '003_create_indexes.sql', '004_group_members.sql', '005_daily_actas.sql']) {
     const script = fs.readFileSync(path.join(__dirname, '..', 'database', file), 'utf8');
     assert.doesNotMatch(script, /\bUSE\s+\[/i);
     assert.doesNotMatch(script, /PlanillaChecksDB/);

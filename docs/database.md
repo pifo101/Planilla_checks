@@ -12,13 +12,15 @@ Agencia
            +--- SolicitudPlanilla
 
 Usuario --- crea Planilla
+Usuario --- crea ActaDiaria (una por fecha global)
 ```
 
-- `agencias.id`, `usuarios.id`, `planillas.id` y `solicitudes_planilla.id` son las claves primarias.
+- `agencias.id`, `usuarios.id`, `actas_diarias.id`, `planillas.id` y `solicitudes_planilla.id` son las claves primarias.
 - `usuarios.agencia_id` referencia `agencias.id` y es obligatorio para el rol `ASISTENTE`.
 - `planillas.agencia_id` referencia `agencias.id`.
 - `planillas.creada_por_usuario_id` referencia `usuarios.id`.
 - `solicitudes_planilla.planilla_id` referencia `planillas.id`.
+- `actas_diarias.creada_por_usuario_id` referencia `usuarios.id`.
 
 ## Restricciones
 
@@ -33,7 +35,9 @@ Usuario --- crea Planilla
 
 ## Acta
 
-La decision temporal es conservar `planillas.numero_acta` como nullable. Esto permite capturar un numero manual o automatico sin imponer todavia su origen. Si el acta adquiere ciclo de vida, documentos o relaciones propias, se migrara a una entidad separada.
+`actas_diarias` representa el acta global vigente de cada fecha operativa. Contiene `id BIGINT`, `fecha DATE`, `numero_acta NVARCHAR(50)`, `creada_por_usuario_id` y `fecha_creacion DATETIME2(0)`. `UQ_actas_diarias_fecha` garantiza una sola fila por fecha incluso ante creaciones concurrentes; el numero no es unico entre fechas.
+
+El numero se captura manualmente, se recorta y admite de 1 a 50 caracteres sin caracteres de control. No se impone un formato empresarial. `planillas.numero_acta NVARCHAR(50) NULL` se conserva como snapshot: las planillas nuevas copian el valor vigente al enviarse y las historicas sin informacion real permanecen `NULL`. No se agrega `acta_diaria_id`, porque el snapshot existente cubre el requisito historico sin duplicar una relacion que hoy no se necesita.
 
 ## Indices
 
@@ -47,17 +51,21 @@ La decision temporal es conservar `planillas.numero_acta` como nullable. Esto pe
 
 `src/config/database.js` mantiene un unico pool reutilizable de `mssql/msnodesqlv8`. Los repositorios contienen SQL parametrizado; los servicios aplican reglas que dependen del usuario autenticado. `planilla.repository.js` crea la planilla y todas sus solicitudes o miembros dentro de una transaccion, con rollback ante cualquier error. El envio usa estado `ENVIADA` y una fecha de envio generada en el servidor.
 
-El historial del asistente consulta unicamente planillas enviadas de la agencia presente en la sesion revalidada. El listado usa un rango semiabierto sobre `fecha_envio` (`>= inicio UTC`, `< dia siguiente`), pagina 20 filas y obtiene de SQL `COUNT` y `SUM` con `COALESCE` sobre `solicitudes_planilla`. El detalle exige simultaneamente el ID de planilla y la agencia autorizada en ambas consultas; una planilla ajena se comporta como inexistente. Cada miembro grupal permanece como una fila independiente.
+El historial del asistente consulta unicamente planillas enviadas de la agencia presente en la sesion revalidada. El listado usa el rango UTC correspondiente al dia calendario de `America/Guatemala`, pagina 20 filas y obtiene de SQL `COUNT` y `SUM` con `COALESCE` sobre `solicitudes_planilla`. El listado y detalle leen `planillas.numero_acta`, nunca el acta actualmente vigente. El detalle exige simultaneamente el ID de planilla y la agencia autorizada; una planilla ajena se comporta como inexistente.
 
-`POST /api/planillas` no acepta agencia, usuario creador, codigo, estado, fechas ni montos libres como autoridad del navegador. El servicio toma usuario y agencia de la sesion revalidada, verifica el snapshot firmado emitido durante la consulta, genera un codigo tecnico `PLN-<UUID>` y comprueba disponibilidad antes de abrir la transaccion. Las restricciones UNIQUE de `(numero_solicitud, miembro_id)`, `numero_cheque` y `codigo` permanecen como defensa ante condiciones de carrera; los errores de conflicto se traducen sin exponer detalles SQL.
+`POST /api/planillas` no acepta acta, agencia, usuario creador, codigo, estado, fechas ni montos libres como autoridad del navegador. El servicio trunca el instante al segundo para coincidir con `DATETIME2(0)`, calcula sobre ese mismo valor la fecha operativa en Guatemala, consulta el acta en SQL y rechaza el envio con `DAILY_ACTA_REQUIRED` si falta. Si existe, copia `numero_acta` a la nueva planilla. Las restricciones UNIQUE de solicitudes, cheques y codigo permanecen como defensa ante condiciones de carrera.
+
+`GET /api/acta-diaria` requiere autenticacion y consulta la fecha operativa actual sin usar agencia. `POST /api/acta-diaria` requiere rol `ASISTENTE`, acepta solo el dato manual `numeroActa` como autoridad y toma fecha y creador del servidor. Los errores SQL `2601/2627` de `UQ_actas_diarias_fecha` se convierten en `DAILY_ACTA_ALREADY_EXISTS` y, cuando es posible, incluyen el acta ganadora. No hay endpoints de actualizacion o eliminacion.
 
 `database/004_group_members.sql` migra instalaciones existentes: agrega `miembro_id`, elimina `UQ_solicitudes_numero_solicitud` y crea `UQ_solicitudes_numero_solicitud_miembro`. No elimina ni recrea tablas ni bases.
+
+`database/005_daily_actas.sql` crea `actas_diarias` de forma incremental y no inventa actas para planillas historicas.
 
 Las reglas confirmadas de asociacion no requieren cambios de esquema: los montos resultantes ya se almacenan por fila de emision y el constraint compuesto sigue evitando duplicar la misma emision tecnica dentro de una solicitud.
 
 El borrador del navegador no es persistencia. El historial consultable del asistente ya usa SQL Server y es de solo lectura. La recepcion y el procesamiento de Contabilidad continuan pendientes.
 
-`DB_DATABASE` es obligatorio. `001_create_database.sql` es un bootstrap opcional y crea unicamente la base inicial predeterminada `PlanillaChecksDB`; una base con otro nombre debe existir previamente. `002_create_tables.sql` y `003_create_indexes.sql` no contienen `USE`: deben ejecutarse con `sqlcmd -d "NombreBase"` y operan exclusivamente sobre esa conexion seleccionada. La verificacion integral compara `DB_NAME()` con `DB_DATABASE` antes de crear datos temporales.
+`DB_DATABASE` es obligatorio. `001_create_database.sql` es un bootstrap opcional y crea unicamente la base inicial predeterminada `PlanillaChecksDB`; una base con otro nombre debe existir previamente. Los scripts `002` a `005` no contienen `USE`: deben ejecutarse con `sqlcmd -d "NombreBase"` y operan exclusivamente sobre esa conexion seleccionada. La verificacion integral compara `DB_NAME()` con `DB_DATABASE` antes de crear datos temporales.
 
 Las pruebas de integracion exigen una base separada mediante `TEST_DB_DATABASE`. El nombre debe terminar en `TestDB`, ser distinto de `DB_DATABASE` y existir previamente. La suite no crea ni elimina bases. La configuracion TLS definitiva de SQL Server depende de la infraestructura de despliegue; el entorno actual usa SQL Server Express local.
 

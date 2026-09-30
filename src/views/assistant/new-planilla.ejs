@@ -9,6 +9,29 @@
       <p class="text-muted mb-0">Consulta y agrega solicitudes antes de enviar la planilla.</p>
     </div>
 
+    <section class="card mb-4" data-daily-acta data-acta-available="<%= dailyActa.acta ? 'true' : 'false' %>">
+      <div class="card-body p-4">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-8 col-lg-6">
+            <label class="form-label fw-semibold" for="numeroActa">Acta del dia</label>
+            <input class="form-control readonly-field <%= dailyActa.acta ? '' : 'd-none' %>" id="numeroActa" data-acta-current type="text" value="<%= dailyActa.acta ? dailyActa.acta.numeroActa : '' %>" readonly>
+            <form class="<%= dailyActa.acta ? 'd-none' : '' %>" data-acta-form>
+              <div class="input-group">
+                <input class="form-control" data-acta-input type="text" maxlength="50" autocomplete="off" aria-describedby="actaHelp" required>
+                <button class="btn btn-primary" type="submit" data-save-acta>Guardar acta</button>
+              </div>
+            </form>
+            <div class="form-text" id="actaHelp" data-acta-help>
+              <%= dailyActa.acta
+                ? `Acta global vigente para ${dailyActa.fecha}. No puede modificarse durante el dia.`
+                : `No hay acta registrada para hoy (${dailyActa.fecha}). Ingrese el numero de acta para continuar.` %>
+            </div>
+            <div class="alert d-none mt-3 mb-0" role="alert" data-acta-feedback></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <form data-solicitud-form>
       <section class="card mb-4">
         <div class="card-body p-4">

@@ -16,6 +16,8 @@ const authService = require('../src/services/auth.service');
 const planillaService = require('../src/services/planilla.service');
 const { createGroupFingerprint, createSubmissionToken } = require('../src/services/planilla-token.service');
 const planillaRepository = require('../src/repositories/planilla.repository');
+const actaService = require('../src/services/acta.service');
+const { getOperationalDate, getOperationalDateRange } = require('../src/utils/operational-date');
 
 const suffix = `${Date.now()}${crypto.randomInt(1000, 9999)}`;
 const agencyCode = `TEST-${suffix}`.slice(0, 30);
@@ -78,6 +80,11 @@ async function cleanup() {
       FROM dbo.planillas AS p
       INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
        WHERE a.codigo IN (@agencyCode, @alternateAgencyCode);
+
+      DELETE ad
+      FROM dbo.actas_diarias AS ad
+      INNER JOIN dbo.usuarios AS u ON u.id = ad.creada_por_usuario_id
+      WHERE u.email IN (@activeEmail, @alternateEmail, @inactiveEmail, @accountingEmail, @deletedEmail);
 
       DELETE FROM dbo.usuarios WHERE email IN (@activeEmail, @alternateEmail, @inactiveEmail, @accountingEmail, @deletedEmail);
       DELETE FROM dbo.agencias WHERE codigo IN (@agencyCode, @alternateAgencyCode);
@@ -183,6 +190,48 @@ async function main() {
   assert.equal(Number.isSafeInteger(serviceUser.id), true);
   assert.equal(Number.isSafeInteger(serviceUser.agenciaId), true);
 
+  const alternateServiceUser = {
+    id: Number(alternateUser.id),
+    rol: 'ASISTENTE',
+    agenciaId: alternateAgencyId,
+  };
+  const integrationNow = new Date();
+  const operationalDate = getOperationalDate(integrationNow);
+  assert.equal((await actaService.getCurrentActa({ now: () => integrationNow })).acta, null);
+  const dailyActa = await actaService.createCurrentActa(
+    serviceUser,
+    { numeroActa: `ACTA-X-${suffix}` },
+    { now: () => integrationNow },
+  );
+  assert.equal(dailyActa.fecha, operationalDate);
+  assert.equal(
+    (await actaService.getCurrentActa({ now: () => integrationNow, user: alternateServiceUser })).acta.numeroActa,
+    dailyActa.numeroActa,
+  );
+  await assert.rejects(
+    actaService.createCurrentActa(
+      alternateServiceUser,
+      { numeroActa: `ACTA-NO-REEMPLAZAR-${suffix}` },
+      { now: () => integrationNow },
+    ),
+    (error) => error.code === 'DAILY_ACTA_ALREADY_EXISTS'
+      && error.acta.numeroActa === dailyActa.numeroActa,
+  );
+
+  const concurrentNow = new Date('2035-01-15T12:00:00.000Z');
+  const concurrentDate = getOperationalDate(concurrentNow);
+  const concurrentResults = await Promise.allSettled([
+    actaService.createCurrentActa(serviceUser, { numeroActa: `ACTA-C1-${suffix}` }, { now: () => concurrentNow }),
+    actaService.createCurrentActa(alternateServiceUser, { numeroActa: `ACTA-C2-${suffix}` }, { now: () => concurrentNow }),
+  ]);
+  assert.equal(concurrentResults.filter((result) => result.status === 'fulfilled').length, 1);
+  assert.equal(concurrentResults.filter((result) => result.status === 'rejected'
+    && result.reason.code === 'DAILY_ACTA_ALREADY_EXISTS').length, 1);
+  const concurrentCount = await pool.request()
+    .input('fecha', sql.Date, concurrentDate)
+    .query('SELECT COUNT(*) AS total FROM dbo.actas_diarias WHERE fecha = @fecha;');
+  assert.equal(concurrentCount.recordset[0].total, 1);
+
   const solicitud = {
     numeroSolicitud: suffix,
     cliente: 'Cliente temporal',
@@ -200,7 +249,7 @@ async function main() {
     montoCancelado: solicitud.montoCanceladoCentavos / 100,
     descuentos: solicitud.descuentosCentavos / 100,
     montoCheque: solicitud.montoChequeCentavos / 100,
-  });
+  }, { now: () => integrationNow });
   const repositorySolicitud = {
     numeroSolicitud: solicitud.numeroSolicitud,
     nombreCliente: solicitud.cliente,
@@ -215,13 +264,13 @@ async function main() {
   const createdPlanilla = await planillaService.createPlanilla(
     serviceUser,
     { solicitudes: [solicitud] },
-    { generateCode: () => `PLN-${suffix}` },
+    { now: () => integrationNow, generateCode: () => `PLN-${suffix}` },
   );
   assert.equal(createdPlanilla.agenciaId, agenciaId);
   assert.equal(createdPlanilla.estado, 'ENVIADA');
 
   const groupedRequestNumber = `6${suffix}`;
-  const groupedFingerprint = createGroupFingerprint(['19536', '19537'], new Date());
+  const groupedFingerprint = createGroupFingerprint(['19536', '19537'], integrationNow);
   const groupedRequests = ['19536', '19537'].map((miembroId, index) => {
     const numeroCheque = `GRP-${index}-${suffix}`;
     const montoCancelado = index === 0 ? 500 : 0;
@@ -239,30 +288,30 @@ async function main() {
         montoCancelado,
         descuentos: 100,
         montoCheque: 1900,
-      }),
+      }, { now: () => integrationNow }),
     };
   });
   const groupedPlanilla = await planillaService.createPlanilla(
     serviceUser,
     { solicitudes: groupedRequests },
-    { generateCode: () => `PLN-G-${suffix}` },
+    { now: () => integrationNow, generateCode: () => `PLN-G-${suffix}` },
   );
   assert.equal(groupedPlanilla.solicitudes.length, 2);
-  const alternatePlanilla = await planillaRepository.createWithSolicitudes({
-    codigo: `PLN-ALT-${suffix}`,
-    agenciaId: alternateAgencyId,
-    usuarioId: Number(alternateUser.id),
-    fechaEnvio: new Date(),
-    estado: 'ENVIADA',
-    numeroActa: null,
-  }, [{
-    ...repositorySolicitud,
-    numeroSolicitud: `4${suffix}`,
-    numeroCheque: `ALT-${suffix}`,
-  }]);
-  const historyDate = new Date().toISOString().slice(0, 10);
-  const historyStart = new Date(`${historyDate}T00:00:00.000Z`);
-  const historyEnd = new Date(historyStart.getTime() + (24 * 60 * 60 * 1000));
+  const alternateRequestNumber = `4${suffix}`;
+  const alternatePlanilla = await planillaService.createPlanilla(alternateServiceUser, {
+    solicitudes: [{
+      numeroSolicitud: alternateRequestNumber,
+      numeroCheque: `ALT-${suffix}`,
+      submissionToken: createSubmissionToken(alternateServiceUser.id, alternateRequestNumber, {
+        cliente: 'Cliente agencia alterna', metodologia: 'INDIVIDUAL',
+        montoAprobado: 1500, montoCancelado: 100, descuentos: 200, montoCheque: 1200,
+      }, { now: () => integrationNow }),
+    }],
+  }, { now: () => integrationNow, generateCode: () => `PLN-ALT-${suffix}` });
+  assert.equal(createdPlanilla.numeroActa, dailyActa.numeroActa);
+  assert.equal(alternatePlanilla.numeroActa, dailyActa.numeroActa);
+  const historyDate = operationalDate;
+  const { startDate: historyStart, endDate: historyEnd } = getOperationalDateRange(historyDate);
   const agencyHistory = await planillaRepository.findSentByAgencyAndDate(
     agenciaId,
     historyStart,
@@ -285,6 +334,7 @@ async function main() {
   assert.equal(groupedDetail.cantidadRegistros, 2);
   assert.equal(groupedDetail.totalAprobado, '4500.00');
   assert.equal(groupedDetail.totalCancelado, '500.00');
+  assert.equal(groupedDetail.numeroActa, dailyActa.numeroActa);
   assert.deepEqual(groupedDetail.solicitudes.map((item) => item.montoCancelado), ['500.00', '0.00']);
   assert.equal(await planillaRepository.findDetailForAgency(alternatePlanilla.id, agenciaId), null);
   const groupedRows = await pool.request()
@@ -298,6 +348,37 @@ async function main() {
     `);
   assert.deepEqual(groupedRows.recordset.map((row) => row.miembroId), ['19536', '19537']);
   assert.deepEqual(groupedRows.recordset.map((row) => row.montoCancelado), ['500.00', '0.00']);
+
+  const nextDayNow = new Date('2036-02-02T12:00:00.000Z');
+  const nextDayDate = getOperationalDate(nextDayNow);
+  assert.equal((await actaService.getCurrentActa({ now: () => nextDayNow })).acta, null);
+  const nextDayRequest = `3${suffix}`;
+  const nextDaySubmission = {
+    solicitudes: [{
+      numeroSolicitud: nextDayRequest,
+      numeroCheque: `NEXT-${suffix}`,
+      submissionToken: createSubmissionToken(serviceUser.id, nextDayRequest, {
+        cliente: 'Cliente fecha siguiente', metodologia: 'INDIVIDUAL',
+        montoAprobado: 1000, montoCancelado: 0, descuentos: 100, montoCheque: 900,
+      }, { now: () => nextDayNow }),
+    }],
+  };
+  await assert.rejects(
+    planillaService.createPlanilla(serviceUser, nextDaySubmission, { now: () => nextDayNow }),
+    (error) => error.code === 'DAILY_ACTA_REQUIRED',
+  );
+  const nextDayActa = await actaService.createCurrentActa(
+    serviceUser,
+    { numeroActa: `ACTA-Y-${suffix}` },
+    { now: () => nextDayNow },
+  );
+  assert.equal(nextDayActa.fecha, nextDayDate);
+  const nextDayPlanilla = await planillaService.createPlanilla(serviceUser, nextDaySubmission, {
+    now: () => nextDayNow,
+    generateCode: () => `PLN-Y-${suffix}`,
+  });
+  assert.equal(nextDayPlanilla.numeroActa, nextDayActa.numeroActa);
+  assert.equal((await planillaRepository.findDetailForAgency(createdPlanilla.id, agenciaId)).numeroActa, dailyActa.numeroActa);
 
   const rollbackGroupCode = `PLN-GR-${suffix}`;
   await assert.rejects(
