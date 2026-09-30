@@ -1,10 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const planillaService = require('../src/services/planilla.service');
-const { listSentPlanillas, showSentPlanilla } = require('../src/controllers/assistant.controller');
+const actaService = require('../src/services/acta.service');
+const { listSentPlanillas, showNewPlanilla, showSentPlanilla } = require('../src/controllers/assistant.controller');
 
 const originalList = planillaService.listSentPlanillas;
 const originalDetail = planillaService.getSentPlanillaDetail;
+const originalGetActa = actaService.getCurrentActa;
 
 function response() {
   return {
@@ -21,6 +23,16 @@ function response() {
 test.afterEach(() => {
   planillaService.listSentPlanillas = originalList;
   planillaService.getSentPlanillaDetail = originalDetail;
+  actaService.getCurrentActa = originalGetActa;
+});
+
+test('nueva planilla muestra acta vigente o solicitud de captura sin bloquear historial', async () => {
+  actaService.getCurrentActa = async () => ({ fecha: '2026-09-30', acta: null });
+  const res = response();
+  await showNewPlanilla({ session: { user: { id: 1 } } }, res);
+  assert.equal(res.view, 'assistant/new-planilla');
+  assert.deepEqual(res.body.dailyActa, { fecha: '2026-09-30', acta: null });
+  assert.equal(res.headers['Cache-Control'], 'no-store');
 });
 
 test('listado entrega al servicio la sesion revalidada y no usa agencia del navegador', async () => {

@@ -16,7 +16,8 @@ async function insertPlanilla(transaction, planilla) {
       codigo, agencia_id, creada_por_usuario_id, fecha_envio, estado, numero_acta
     )
     OUTPUT inserted.id, inserted.codigo, inserted.agencia_id AS agenciaId,
-           inserted.creada_por_usuario_id AS usuarioId, inserted.estado
+           inserted.creada_por_usuario_id AS usuarioId, inserted.estado,
+           inserted.numero_acta AS numeroActa
     VALUES (@codigo, @agenciaId, @usuarioId, @fechaEnvio, @estado, @numeroActa);
   `);
 
@@ -107,7 +108,7 @@ async function findSentByAgencyAndDate(agenciaId, startDate, endDate, page, page
     .input('offset', sql.Int, offset)
     .input('pageSize', sql.Int, pageSize)
     .query(`
-      SELECT p.id, p.codigo, p.fecha_envio AS fechaEnvio, p.estado,
+      SELECT p.id, p.codigo, p.fecha_envio AS fechaEnvio, p.estado, p.numero_acta AS numeroActa,
              a.id AS agenciaId, a.nombre AS agenciaNombre,
              COUNT(sp.id) AS cantidadRegistros,
              CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_aprobado), CONVERT(DECIMAL(18, 2), 0))) AS totalAprobado,
@@ -120,7 +121,7 @@ async function findSentByAgencyAndDate(agenciaId, startDate, endDate, page, page
       WHERE p.agencia_id = @agenciaId
         AND p.fecha_envio >= @startDate
         AND p.fecha_envio < @endDate
-      GROUP BY p.id, p.codigo, p.fecha_envio, p.estado, a.id, a.nombre
+      GROUP BY p.id, p.codigo, p.fecha_envio, p.estado, p.numero_acta, a.id, a.nombre
       ORDER BY p.fecha_envio DESC, p.id DESC
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
     `);

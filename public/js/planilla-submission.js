@@ -40,6 +40,7 @@
           if (!response.ok || !payload?.success) {
             const error = new Error(payload?.error?.message || 'No fue posible enviar la planilla.');
             error.code = payload?.error?.code || 'PLANILLA_SUBMISSION_FAILED';
+            error.data = payload?.data;
             throw error;
           }
           return payload.data.planilla;

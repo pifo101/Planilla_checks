@@ -31,7 +31,15 @@ if (solicitudForm) {
   const draftBody = document.querySelector('[data-draft-body]');
   const draftCount = document.querySelector('[data-draft-count]');
   const sendButton = document.querySelector('[data-send-planilla]');
+  const actaSection = document.querySelector('[data-daily-acta]');
+  const actaForm = actaSection.querySelector('[data-acta-form]');
+  const actaInput = actaSection.querySelector('[data-acta-input]');
+  const actaCurrent = actaSection.querySelector('[data-acta-current]');
+  const actaHelp = actaSection.querySelector('[data-acta-help]');
+  const actaFeedback = actaSection.querySelector('[data-acta-feedback]');
+  const saveActaButton = actaSection.querySelector('[data-save-acta]');
   const currency = new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' });
+  let actaAvailable = actaSection.dataset.actaAvailable === 'true';
   let currentRequest = null;
   let checkingAvailability = false;
   let sendingPlanilla = false;
@@ -43,6 +51,37 @@ if (solicitudForm) {
   function showFeedback(message, tone) {
     feedback.textContent = message;
     feedback.className = `alert alert-${tone} mt-3 mb-0`;
+  }
+
+  function showActaFeedback(message, tone) {
+    actaFeedback.textContent = message;
+    actaFeedback.className = `alert alert-${tone} mt-3 mb-0`;
+  }
+
+  function renderActa(fecha, acta, message) {
+    actaAvailable = Boolean(acta);
+    actaSection.dataset.actaAvailable = String(actaAvailable);
+    actaCurrent.value = acta?.numeroActa || '';
+    actaCurrent.classList.toggle('d-none', !actaAvailable);
+    actaForm.classList.toggle('d-none', actaAvailable);
+    actaHelp.textContent = actaAvailable
+      ? `Acta global vigente para ${fecha}. No puede modificarse durante el dia.`
+      : `No hay acta registrada para hoy (${fecha}). Ingrese el numero de acta para continuar.`;
+    if (message) showActaFeedback(message, actaAvailable ? 'success' : 'warning');
+    renderDraft();
+  }
+
+  async function refreshDailyActa(message) {
+    try {
+      const response = await fetch('/api/acta-diaria', { headers: { accept: 'application/json' } });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.success) throw new Error(payload?.error?.message);
+      renderActa(payload.data.fecha, payload.data.acta, message);
+    } catch (error) {
+      showActaFeedback(error.message || 'No fue posible actualizar el acta del dia.', 'danger');
+      actaAvailable = false;
+      renderDraft();
+    }
   }
 
   function setData(data) {
@@ -150,7 +189,7 @@ if (solicitudForm) {
 
   function renderDraft() {
     draftCount.textContent = `${draftRequests.length} ${draftRequests.length === 1 ? 'registro' : 'registros'}`;
-    sendButton.disabled = sendingPlanilla || draftRequests.length === 0;
+    sendButton.disabled = sendingPlanilla || !actaAvailable || draftRequests.length === 0;
     sendButton.innerHTML = sendingPlanilla
       ? '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Enviando'
       : '<i class="bi bi-send-check me-2"></i>Enviar planilla';
@@ -443,6 +482,34 @@ if (solicitudForm) {
       : 'Solicitud eliminada del borrador.', 'info');
   });
 
+  actaForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const numeroActa = actaInput.value.trim();
+    saveActaButton.disabled = true;
+    showActaFeedback('Guardando el acta del dia...', 'info');
+    try {
+      const response = await fetch('/api/acta-diaria', {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify({ numeroActa }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (response.status === 409 && payload?.data?.acta) {
+        renderActa(payload.data.acta.fecha, payload.data.acta, 'Otra persona registro el acta primero. Se utilizara el valor vigente.');
+        return;
+      }
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error?.message || 'No fue posible registrar el acta del dia.');
+      }
+      actaInput.value = '';
+      renderActa(payload.data.acta.fecha, payload.data.acta, 'Acta del dia registrada correctamente.');
+    } catch (error) {
+      showActaFeedback(error.message || 'No fue posible registrar el acta del dia.', 'danger');
+    } finally {
+      saveActaButton.disabled = false;
+    }
+  });
+
   sendButton.addEventListener('click', async () => {
     if (sendingPlanilla || planillaSubmitter.isPending()) return;
     if (draftRequests.length === 0) {
@@ -462,6 +529,9 @@ if (solicitudForm) {
       showFeedback(`Planilla ${planilla.codigo} enviada y guardada correctamente.`, 'success');
     } catch (error) {
       showFeedback(error.message || 'No fue posible enviar la planilla. El borrador se conserva.', 'danger');
+      if (error.code === 'DAILY_ACTA_REQUIRED') {
+        await refreshDailyActa('La fecha operativa cambio. Registra el acta del nuevo dia para enviar el borrador.');
+      }
     } finally {
       sendingPlanilla = false;
       updateAddButton();

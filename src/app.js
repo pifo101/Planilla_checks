@@ -52,7 +52,7 @@ app.use((req, res, next) => {
   res.locals.dateTime = new Intl.DateTimeFormat('es-GT', {
     dateStyle: 'medium',
     timeStyle: 'short',
-    timeZone: 'UTC',
+    timeZone: 'America/Guatemala',
   });
   res.locals.sqlCurrency = { format: formatSqlCurrency };
   next();

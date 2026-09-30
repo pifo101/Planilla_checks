@@ -36,7 +36,14 @@ Reglas del flujo:
 23. Dos emisiones con el mismo nombre normalizado o dos abonos para el mismo nombre son ambiguos y bloquean la solicitud completa; no se adivina ni se suman abonos.
 24. Todos los miembros de un grupo calculado se agregan y envian juntos. Cada uno requiere un numero de cheque distinto.
 25. El historial del asistente es de solo lectura y muestra exclusivamente planillas de su agencia revalidada. El filtro diario utiliza `fecha_envio`; cada miembro grupal se cuenta y se muestra como un registro independiente.
+26. Existe una sola acta global por fecha operativa de `America/Guatemala`; no pertenece a usuario ni agencia.
+27. El primer `ASISTENTE` activo del dia introduce manualmente el numero. El servidor fija fecha y creador; los demas asistentes y agencias reutilizan el mismo valor.
+28. El acta es inmutable durante el dia en el flujo ordinario. No se genera automaticamente, no se edita y no se elimina.
+29. Sin acta vigente se puede consultar historial y preparar el borrador, pero `Enviar planilla` se rechaza. Al cambiar de fecha no se hereda el acta anterior.
+30. En cada envio el servidor consulta nuevamente SQL y guarda `planillas.numero_acta` como snapshot. El navegador no controla el acta, fecha, creador ni agencia.
+31. `UNIQUE(actas_diarias.fecha)` decide las carreras concurrentes. El segundo intento no reemplaza al primero y recibe el acta vigente.
 
 ## Pendientes de confirmacion del ingeniero
 
 1. El flujo real de recepcion/procesamiento de Contabilidad. Las planillas enviadas y el historial del asistente ya usan SQL Server, pero Contabilidad permanece fuera de alcance.
+2. La autoridad y el procedimiento excepcional para corregir un acta introducida incorrectamente. No existe correccion ordinaria en esta feature.

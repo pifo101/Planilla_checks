@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const planillaRepository = require('../src/repositories/planilla.repository');
+const actaService = require('../src/services/acta.service');
 const {
   MAX_SOLICITUDES,
   PlanillaError,
@@ -12,10 +13,12 @@ const { createSubmissionToken } = require('../src/services/planilla-token.servic
 
 const originalFindSolicitudUsage = planillaRepository.findSolicitudUsage;
 const originalCreateWithSolicitudes = planillaRepository.createWithSolicitudes;
+const originalGetCurrentActa = actaService.getCurrentActa;
 const user = { id: 10, rol: 'ASISTENTE', agenciaId: 20 };
 const now = new Date('2026-09-29T14:00:00.000Z');
 
 function validRequest(overrides = {}) {
+  const { tokenNow = now, ...requestOverrides } = overrides;
   const values = {
     numeroSolicitud: '123456',
     cliente: 'CLIENTE PRUEBA',
@@ -28,7 +31,7 @@ function validRequest(overrides = {}) {
     miembroId: null,
     cantidadMiembros: null,
     grupoFingerprint: null,
-    ...overrides,
+    ...requestOverrides,
   };
   const submissionToken = createSubmissionToken(user.id, values.numeroSolicitud, {
     cliente: values.cliente,
@@ -40,7 +43,7 @@ function validRequest(overrides = {}) {
     miembroId: values.miembroId,
     cantidadMiembros: values.cantidadMiembros,
     grupoFingerprint: values.grupoFingerprint,
-  }, { now: () => now });
+  }, { now: () => tokenNow });
   return {
     numeroSolicitud: values.numeroSolicitud,
     numeroCheque: values.numeroCheque,
@@ -53,9 +56,17 @@ function submission(...requests) {
   return { solicitudes: requests.length ? requests : [validRequest()] };
 }
 
+test.beforeEach(() => {
+  actaService.getCurrentActa = async () => ({
+    fecha: '2026-09-29',
+    acta: { id: 1, fecha: '2026-09-29', numeroActa: 'ACTA-X' },
+  });
+});
+
 test.afterEach(() => {
   planillaRepository.findSolicitudUsage = originalFindSolicitudUsage;
   planillaRepository.createWithSolicitudes = originalCreateWithSolicitudes;
+  actaService.getCurrentActa = originalGetCurrentActa;
 });
 
 test('crea una planilla ENVIADA usando usuario, agencia, fecha y codigo del servidor', async () => {
@@ -85,7 +96,7 @@ test('crea una planilla ENVIADA usando usuario, agencia, fecha y codigo del serv
     usuarioId: 10,
     fechaEnvio: now,
     estado: 'ENVIADA',
-    numeroActa: null,
+    numeroActa: 'ACTA-X',
   });
   assert.deepEqual(persisted.solicitudes[0], {
     numeroSolicitud: '123456',
@@ -258,6 +269,32 @@ test('rechaza solicitudes y cheques ya persistidos antes de insertar', async () 
     createPlanilla(user, submission(), { now: () => now }),
     (error) => error.code === 'CHECK_ALREADY_USED' && error.status === 409,
   );
+});
+
+test('rechaza el envio sin acta diaria y no acepta un acta falsificada por el cliente', async () => {
+  planillaRepository.findSolicitudUsage = async () => ({ solicitudUtilizada: false, chequeUtilizado: false });
+  actaService.getCurrentActa = async () => ({ fecha: '2026-09-29', acta: null });
+  let persisted = false;
+  planillaRepository.createWithSolicitudes = async () => { persisted = true; };
+  await assert.rejects(
+    createPlanilla(user, { ...submission(), numeroActa: 'ACTA-FALSA' }, { now: () => now }),
+    (error) => error.code === 'DAILY_ACTA_REQUIRED' && error.status === 409,
+  );
+  assert.equal(persisted, false);
+});
+
+test('consulta el acta correspondiente al instante efectivo del envio', async () => {
+  planillaRepository.findSolicitudUsage = async () => ({ solicitudUtilizada: false, chequeUtilizado: false });
+  let receivedNow;
+  actaService.getCurrentActa = async (options) => {
+    receivedNow = options.now();
+    return { fecha: '2026-10-01', acta: { numeroActa: 'ACTA-Y' } };
+  };
+  planillaRepository.createWithSolicitudes = async (planilla) => ({ id: 1, ...planilla });
+  const midnight = new Date('2026-10-01T06:00:01.000Z');
+  const result = await createPlanilla(user, submission(validRequest({ tokenNow: midnight })), { now: () => midnight });
+  assert.equal(receivedNow.getTime(), midnight.getTime());
+  assert.equal(result.numeroActa, 'ACTA-Y');
 });
 
 for (const [constraint, expectedCode] of [

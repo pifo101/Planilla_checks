@@ -56,11 +56,12 @@ sqlcmd -S ".\SQLEXPRESS" -E -C -i "database\001_create_database.sql" -b
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\002_create_tables.sql" -b
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\003_create_indexes.sql" -b
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\004_group_members.sql" -b
+sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\005_daily_actas.sql" -b
 ```
 
 No se incluyen agencias de demostracion. Las agencias institucionales deben cargarse con sus codigos y nombres reales antes de crear asistentes.
 
-`001_create_database.sql` es un bootstrap opcional que crea unicamente `PlanillaChecksDB`. Para otro `DB_DATABASE`, la base debe existir previamente y los scripts `002` y `003` deben ejecutarse con `-d` apuntando explicitamente a ella.
+`001_create_database.sql` es un bootstrap opcional que crea unicamente `PlanillaChecksDB`. Para otro `DB_DATABASE`, la base debe existir previamente y los scripts `002` a `005` deben ejecutarse con `-d` apuntando explicitamente a ella.
 
 ## Crear el primer administrador
 
@@ -86,7 +87,7 @@ La aplicacion queda en `http://localhost:3000`. Para recarga automatica usar `np
 
 La verificacion integral requiere una base separada existente indicada por `TEST_DB_DATABASE`, cuyo nombre debe terminar en `TestDB` y ser distinto de `DB_DATABASE`. El script cambia a esa base antes de cargar la aplicacion y comprueba `DB_NAME()` antes de crear fixtures. Si la base no existe o no cumple esas condiciones, falla sin operar sobre la base de desarrollo.
 
-La base de pruebas no se crea ni se elimina automaticamente. Un operador debe crearla explicitamente y aplicar `002`, `003` y `004` con `sqlcmd -d` antes de ejecutar:
+La base de pruebas no se crea ni se elimina automaticamente. Un operador debe crearla explicitamente y aplicar `002`, `003`, `004` y `005` con `sqlcmd -d` antes de ejecutar:
 
 ```powershell
 npm test
@@ -108,7 +109,9 @@ El login provisional fue reemplazado por consulta a SQL Server y `bcrypt.compare
 
 La pantalla Nueva planilla consulta la distribucion mediante `GET /api/solicitudes/:numeroSolicitud/distribucion`. Express llama al Web Service externo, valida la respuesta y la normaliza antes de devolverla al navegador. Obtener datos no inserta registros SQL.
 
-`GET /asistente/planillas` y `GET /asistente/planillas/:id` consultan el historial real de SQL Server en modo de solo lectura. La agencia siempre procede de la sesion revalidada, el listado filtra por el dia UTC de `fecha_envio` y pagina 20 planillas por consulta, y el detalle conserva una fila por cada solicitud o miembro grupal. Las pantallas de Contabilidad continúan usando datos de demostracion.
+Cada fecha operativa de `America/Guatemala` tiene una sola acta global, compartida por todas las agencias. El primer `ASISTENTE` del dia introduce manualmente el numero; los siguientes reutilizan el valor bloqueado. Sin acta se puede consultar y preparar un borrador, pero no enviarlo. El servidor vuelve a consultar el acta al enviar y guarda su numero como snapshot en la planilla. El acta no puede editarse durante el flujo ordinario; la correccion excepcional queda pendiente de una regla de autorizacion.
+
+`GET /asistente/planillas` y `GET /asistente/planillas/:id` consultan el historial real de SQL Server en modo de solo lectura. La agencia siempre procede de la sesion revalidada, el listado filtra por el dia calendario de Guatemala de `fecha_envio`, pagina 20 planillas por consulta y muestra el snapshot del acta; el detalle conserva una fila por cada solicitud o miembro grupal. Las pantallas de Contabilidad continuan usando datos de demostracion.
 
 El contrato, campos, calculos conocidos, errores y reglas pendientes del Web Service estan en [`docs/webservice.md`](docs/webservice.md). El modelo SQL se describe en [`docs/database.md`](docs/database.md) y las reglas funcionales en [`docs/business-rules.md`](docs/business-rules.md).
 
@@ -117,4 +120,4 @@ El contrato, campos, calculos conocidos, errores y reglas pendientes del Web Ser
 - El Web Service institucional disponible usa HTTP dentro de la red interna; su transporte depende del proveedor.
 - El cifrado y los certificados de SQL Server deben definirse segun la infraestructura del despliegue. La configuracion actual corresponde a SQL Server Express local.
 - El rate limiting de login es recomendable antes del despliegue definitivo, pero no forma parte de esta etapa interna.
-- Los scripts `002` y `003` requieren que el operador o runner seleccione explicitamente la base destino con `sqlcmd -d`.
+- Los scripts `002` a `005` requieren que el operador o runner seleccione explicitamente la base destino con `sqlcmd -d`.

@@ -43,21 +43,27 @@ test('lista solamente la agencia autenticada con fecha, rango y paginacion norma
   }, { now: () => now });
 
   assert.equal(received[0], 20);
-  assert.equal(received[1].toISOString(), '2026-09-28T00:00:00.000Z');
-  assert.equal(received[2].toISOString(), '2026-09-29T00:00:00.000Z');
+  assert.equal(received[1].toISOString(), '2026-09-28T06:00:00.000Z');
+  assert.equal(received[2].toISOString(), '2026-09-29T06:00:00.000Z');
   assert.deepEqual(received.slice(3), [2, HISTORY_PAGE_SIZE]);
   assert.equal(result.totalPages, 2);
   assert.equal(result.planillas[0], row);
   assert.equal(result.planillas[0].totalAprobado, 6000.30);
 });
 
-test('usa la fecha UTC actual por defecto y admite cero resultados', async () => {
+test('usa la fecha Guatemala actual por defecto y admite cero resultados', async () => {
   planillaRepository.findSentByAgencyAndDate = async () => ({ total: 0, planillas: [] });
   const result = await listSentPlanillas(user, {}, { now: () => now });
   assert.equal(result.selectedDate, '2026-09-29');
   assert.equal(result.page, 1);
   assert.equal(result.totalPages, 1);
   assert.deepEqual(result.planillas, []);
+});
+
+test('el detalle conserva el snapshot historico aunque exista otra acta vigente', async () => {
+  planillaRepository.findDetailForAgency = async () => ({ id: 41, numeroActa: 'ACTA-HISTORICA', solicitudes: [] });
+  const result = await getSentPlanillaDetail(user, '41');
+  assert.equal(result.numeroActa, 'ACTA-HISTORICA');
 });
 
 test('rechaza fechas, paginas e IDs invalidos', () => {

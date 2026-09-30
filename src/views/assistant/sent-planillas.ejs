@@ -17,13 +17,13 @@
       <div class="table-responsive">
         <table class="table table-hover mb-0">
           <caption class="visually-hidden">Planillas enviadas el <%= selectedDate %></caption>
-          <thead><tr><th>Codigo</th><th>Fecha de envio</th><th>Agencia</th><th>Registros</th><th>Total aprobado</th><th>Total cancelado</th><th>Descuentos</th><th>Monto cheque</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
+          <thead><tr><th>Codigo</th><th>Numero de acta</th><th>Fecha de envio</th><th>Agencia</th><th>Registros</th><th>Total aprobado</th><th>Total cancelado</th><th>Descuentos</th><th>Monto cheque</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
           <tbody>
             <% if (planillas.length === 0) { %>
-              <tr><td class="text-center text-muted py-5" colspan="10">No hay planillas enviadas en la fecha seleccionada.</td></tr>
+              <tr><td class="text-center text-muted py-5" colspan="11">No hay planillas enviadas en la fecha seleccionada.</td></tr>
             <% } %>
             <% planillas.forEach((planilla) => { %>
-              <tr><td class="fw-semibold"><%= planilla.codigo %></td><td class="text-nowrap"><%= dateTime.format(planilla.fechaEnvio) %></td><td><%= planilla.agenciaNombre %></td><td><%= planilla.cantidadRegistros %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalAprobado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalCancelado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalDescuentos) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalMontoCheque) %></td><td><span class="status-badge status-<%= planilla.estado.toLowerCase() %>"><%= planilla.estado %></span></td><td class="text-end"><a class="btn btn-sm btn-outline-primary text-nowrap" href="/asistente/planillas/<%= planilla.id %>"><i class="bi bi-eye me-1"></i>Ver detalle</a></td></tr>
+              <tr><td class="fw-semibold"><%= planilla.codigo %></td><td><%= planilla.numeroActa || 'Sin asignar' %></td><td class="text-nowrap"><%= dateTime.format(planilla.fechaEnvio) %></td><td><%= planilla.agenciaNombre %></td><td><%= planilla.cantidadRegistros %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalAprobado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalCancelado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalDescuentos) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalMontoCheque) %></td><td><span class="status-badge status-<%= planilla.estado.toLowerCase() %>"><%= planilla.estado %></span></td><td class="text-end"><a class="btn btn-sm btn-outline-primary text-nowrap" href="/asistente/planillas/<%= planilla.id %>"><i class="bi bi-eye me-1"></i>Ver detalle</a></td></tr>
             <% }) %>
           </tbody>
         </table>

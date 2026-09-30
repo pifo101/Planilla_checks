@@ -1,5 +1,7 @@
 const crypto = require('node:crypto');
 const planillaRepository = require('../repositories/planilla.repository');
+const actaService = require('./acta.service');
+const { getOperationalDate, getOperationalDateRange, toSecondPrecision } = require('../utils/operational-date');
 const {
   AvailabilityValidationError,
   validateCheckNumber,
@@ -292,12 +294,33 @@ async function createPlanilla(user, submission, options = {}) {
     );
   }
 
-  const now = options.now ? options.now() : new Date();
-  if (!(now instanceof Date) || Number.isNaN(now.getTime())) {
+  let now;
+  try {
+    now = toSecondPrecision(options.now ? options.now() : new Date());
+  } catch {
     throw new PlanillaError('PLANILLA_PERSISTENCE_FAILED', 'No fue posible generar la fecha de envio.', 500);
   }
   const solicitudes = validateSubmission(submission, { userId: user.id, now });
   await ensureAvailable(solicitudes);
+
+  let currentActa;
+  try {
+    currentActa = await actaService.getCurrentActa({ now: () => now });
+  } catch (error) {
+    throw new PlanillaError(
+      'PLANILLA_PERSISTENCE_FAILED',
+      'No fue posible consultar el acta del dia.',
+      500,
+      { cause: error },
+    );
+  }
+  if (!currentActa.acta) {
+    throw new PlanillaError(
+      'DAILY_ACTA_REQUIRED',
+      'Debe registrarse el acta del dia antes de enviar nuevas planillas.',
+      409,
+    );
+  }
 
   const codeFactory = options.generateCode || generatePlanillaCode;
   const snapshots = solicitudes.map((solicitud) => ({
@@ -314,7 +337,7 @@ async function createPlanilla(user, submission, options = {}) {
         usuarioId: user.id,
         fechaEnvio: now,
         estado: 'ENVIADA',
-        numeroActa: null,
+        numeroActa: currentActa.acta.numeroActa,
       }, snapshots);
     } catch (error) {
       if (duplicateKind(error) === 'CODE' && attempt < 2) continue;
@@ -336,20 +359,26 @@ function requireAssistantAgency(user) {
 }
 
 function normalizeHistoryDate(value, now = new Date()) {
-  const selectedDate = value == null || value === '' ? now.toISOString().slice(0, 10) : value;
+  let selectedDate;
+  try {
+    selectedDate = value == null || value === '' ? getOperationalDate(now) : value;
+  } catch {
+    throw new PlanillaError('INVALID_HISTORY_DATE', 'Selecciona una fecha valida.');
+  }
   if (typeof selectedDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)
       || selectedDate < '0001-01-01') {
     throw new PlanillaError('INVALID_HISTORY_DATE', 'Selecciona una fecha valida.');
   }
 
-  const startDate = new Date(`${selectedDate}T00:00:00.000Z`);
-  if (Number.isNaN(startDate.getTime()) || startDate.toISOString().slice(0, 10) !== selectedDate) {
+  let range;
+  try {
+    range = getOperationalDateRange(selectedDate);
+  } catch {
     throw new PlanillaError('INVALID_HISTORY_DATE', 'Selecciona una fecha valida.');
   }
   return {
     selectedDate,
-    startDate,
-    endDate: new Date(startDate.getTime() + (24 * 60 * 60 * 1000)),
+    ...range,
   };
 }
 

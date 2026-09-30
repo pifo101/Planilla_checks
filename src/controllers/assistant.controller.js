@@ -1,9 +1,21 @@
 const planillaService = require('../services/planilla.service');
+const actaService = require('../services/acta.service');
 
-function showNewPlanilla(req, res) {
-  res.render('assistant/new-planilla', {
-    pageTitle: 'Nueva planilla',
-  });
+async function showNewPlanilla(req, res) {
+  try {
+    const dailyActa = await actaService.getCurrentActa();
+    res.set('Cache-Control', 'no-store');
+    return res.render('assistant/new-planilla', {
+      pageTitle: 'Nueva planilla',
+      dailyActa,
+    });
+  } catch (error) {
+    console.error('Error al consultar acta diaria:', error.cause?.message || error.message);
+    return res.status(500).render('500', {
+      pageTitle: 'Error del servidor',
+      errorMessage: 'No fue posible consultar el acta del dia en este momento.',
+    });
+  }
 }
 
 function renderHistoryError(error, res) {
