@@ -93,7 +93,7 @@ La base de pruebas no se crea ni se elimina automaticamente. Un operador debe cr
 npm test
 ```
 
-La integracion crea datos temporales en la base de pruebas, valida repositorios, sesiones, roles y restricciones, y elimina sus fixtures al finalizar.
+La integracion crea datos temporales en la base de pruebas, valida repositorios, sesiones, roles, restricciones y la consulta read-only de Contabilidad sobre varias agencias, y elimina sus fixtures al finalizar.
 
 ## Arquitectura de persistencia
 
@@ -111,7 +111,9 @@ La pantalla Nueva planilla consulta la distribucion mediante `GET /api/solicitud
 
 Cada fecha operativa de `America/Guatemala` tiene una sola acta global, compartida por todas las agencias. El primer `ASISTENTE` del dia introduce manualmente el numero; los siguientes reutilizan el valor bloqueado. Sin acta se puede consultar y preparar un borrador, pero no enviarlo. El servidor vuelve a consultar el acta al enviar y guarda su numero como snapshot en la planilla. El acta no puede editarse durante el flujo ordinario; la correccion excepcional queda pendiente de una regla de autorizacion.
 
-`GET /asistente/planillas` y `GET /asistente/planillas/:id` consultan el historial real de SQL Server en modo de solo lectura. La agencia siempre procede de la sesion revalidada, el listado filtra por el dia calendario de Guatemala de `fecha_envio`, pagina 20 planillas por consulta y muestra el snapshot del acta; el detalle conserva una fila por cada solicitud o miembro grupal. Las pantallas de Contabilidad continuan usando datos de demostracion.
+`GET /asistente/planillas` y `GET /asistente/planillas/:id` consultan el historial real de SQL Server en modo de solo lectura. La agencia siempre procede de la sesion revalidada, el listado filtra por el dia calendario de Guatemala de `fecha_envio`, pagina 20 planillas por consulta y muestra el snapshot del acta; el detalle conserva una fila por cada solicitud o miembro grupal.
+
+`GET /contabilidad/planillas` y `GET /contabilidad/planillas/:id` tambien consultan SQL Server y requieren exclusivamente el rol `CONTABILIDAD`. El listado muestra todas las agencias o una agencia seleccionada, usa por defecto la fecha operativa actual de `America/Guatemala`, pagina 20 planillas y calcula en SQL los totales del conjunto filtrado. Incluye agencias inactivas cuando tienen historial. El detalle usa el snapshot `planillas.numero_acta` y muestra cada miembro grupal persistido de forma independiente. Ambos GET son de solo lectura: abrir una planilla no la marca como recibida o procesada.
 
 El contrato, campos, calculos conocidos, errores y reglas pendientes del Web Service estan en [`docs/webservice.md`](docs/webservice.md). El modelo SQL se describe en [`docs/database.md`](docs/database.md) y las reglas funcionales en [`docs/business-rules.md`](docs/business-rules.md).
 

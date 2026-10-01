@@ -523,6 +523,7 @@ async function main() {
 
   const wrongRole = await fetch(`${baseUrl}/admin/usuarios`, { headers: { cookie }, redirect: 'manual' });
   assert.equal(wrongRole.status, 403, `Redireccion inesperada a ${wrongRole.headers.get('location')}`);
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas`, { headers: { cookie } })).status, 403);
   const correctRole = await fetch(`${baseUrl}/asistente/planillas?fecha=${historyDate}&agenciaId=${alternateAgencyId}`, { headers: { cookie } });
   assert.equal(correctRole.status, 200);
   const historyHtml = await correctRole.text();
@@ -623,7 +624,101 @@ async function main() {
   assert.equal((await fetch(`${baseUrl}/dashboard`, { headers: { cookie: deletedCookie }, redirect: 'manual' })).status, 302);
 
   const accountingLogin = await login(baseUrl, accountingEmail, password);
+  assert.equal(accountingLogin.status, 302);
+  assert.equal(accountingLogin.headers.get('location'), '/contabilidad/planillas');
   const accountingCookie = accountingLogin.headers.get('set-cookie').split(';', 1)[0];
+  const fixturePlanillaIds = [createdPlanilla.id, groupedPlanilla.id, alternatePlanilla.id];
+  async function readAccountingState() {
+    const state = await pool.request()
+      .input('createdId', sql.BigInt, fixturePlanillaIds[0])
+      .input('groupedId', sql.BigInt, fixturePlanillaIds[1])
+      .input('alternateId', sql.BigInt, fixturePlanillaIds[2])
+      .query(`
+        SELECT id, estado, fecha_envio AS fechaEnvio
+        FROM dbo.planillas
+        WHERE id IN (@createdId, @groupedId, @alternateId)
+        ORDER BY id;
+
+        SELECT planilla_id AS planillaId, id, estado, procesado, fecha_procesado AS fechaProcesado
+        FROM dbo.solicitudes_planilla
+        WHERE planilla_id IN (@createdId, @groupedId, @alternateId)
+        ORDER BY planilla_id, id;
+      `);
+    return state.recordsets.map((rows) => rows.map((row) => ({ ...row })));
+  }
+  const stateBeforeAccountingGets = await readAccountingState();
+
+  const accountingList = await fetch(`${baseUrl}/contabilidad/planillas?fecha=${historyDate}`, {
+    headers: { cookie: accountingCookie },
+  });
+  assert.equal(accountingList.status, 200);
+  const accountingHtml = await accountingList.text();
+  assert.match(accountingHtml, new RegExp(`PLN-${suffix}`));
+  assert.match(accountingHtml, new RegExp(`PLN-G-${suffix}`));
+  assert.match(accountingHtml, new RegExp(`PLN-ALT-${suffix}`));
+  assert.match(accountingHtml, new RegExp(`Agencia temporal ${suffix}`));
+  assert.match(accountingHtml, new RegExp(`Agencia alterna ${suffix}`));
+  assert.match(accountingHtml, new RegExp(dailyActa.numeroActa));
+
+  const primaryAgencyList = await fetch(`${baseUrl}/contabilidad/planillas?fecha=${historyDate}&agencia=${agenciaId}`, {
+    headers: { cookie: accountingCookie },
+  });
+  assert.equal(primaryAgencyList.status, 200);
+  const primaryAgencyHtml = await primaryAgencyList.text();
+  assert.match(primaryAgencyHtml, new RegExp(`PLN-${suffix}`));
+  assert.match(primaryAgencyHtml, new RegExp(`PLN-G-${suffix}`));
+  assert.doesNotMatch(primaryAgencyHtml, new RegExp(`PLN-ALT-${suffix}`));
+  assert.match(primaryAgencyHtml, /Q\s*7,500\.00/);
+  assert.match(primaryAgencyHtml, /Q\s*700\.00/);
+  assert.match(primaryAgencyHtml, /Q\s*600\.00/);
+  assert.match(primaryAgencyHtml, /Q\s*6,200\.00/);
+
+  const alternateAgencyList = await fetch(`${baseUrl}/contabilidad/planillas?fecha=${historyDate}&agencia=${alternateAgencyId}`, {
+    headers: { cookie: accountingCookie },
+  });
+  assert.equal(alternateAgencyList.status, 200);
+  const alternateAgencyHtml = await alternateAgencyList.text();
+  assert.match(alternateAgencyHtml, new RegExp(`PLN-ALT-${suffix}`));
+  assert.doesNotMatch(alternateAgencyHtml, new RegExp(`PLN-G-${suffix}`));
+
+  const accountingIndividualDetail = await fetch(`${baseUrl}/contabilidad/planillas/${createdPlanilla.id}`, {
+    headers: { cookie: accountingCookie },
+  });
+  assert.equal(accountingIndividualDetail.status, 200);
+  const accountingIndividualHtml = await accountingIndividualDetail.text();
+  assert.match(accountingIndividualHtml, new RegExp(solicitud.numeroSolicitud));
+  assert.match(accountingIndividualHtml, new RegExp(dailyActa.numeroActa));
+
+  const accountingGroupDetail = await fetch(`${baseUrl}/contabilidad/planillas/${groupedPlanilla.id}`, {
+    headers: { cookie: accountingCookie },
+  });
+  assert.equal(accountingGroupDetail.status, 200);
+  const accountingGroupHtml = await accountingGroupDetail.text();
+  assert.match(accountingGroupHtml, /19536/);
+  assert.match(accountingGroupHtml, /19537/);
+  assert.match(accountingGroupHtml, /Q\s*4,500\.00/);
+  assert.match(accountingGroupHtml, /Q\s*500\.00/);
+
+  const accountingAlternateDetail = await fetch(`${baseUrl}/contabilidad/planillas/${alternatePlanilla.id}`, {
+    headers: { cookie: accountingCookie },
+  });
+  assert.equal(accountingAlternateDetail.status, 200);
+  assert.match(await accountingAlternateDetail.text(), new RegExp(`Agencia alterna ${suffix}`));
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/0`, { headers: { cookie: accountingCookie } })).status, 400);
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/999999999999999`, { headers: { cookie: accountingCookie } })).status, 404);
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas?fecha=2026-02-30`, { headers: { cookie: accountingCookie } })).status, 400);
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas?agencia=0`, { headers: { cookie: accountingCookie } })).status, 400);
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas?agencia=999999999`, { headers: { cookie: accountingCookie } })).status, 400);
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas?page=0`, { headers: { cookie: accountingCookie } })).status, 400);
+  const emptyAccounting = await fetch(`${baseUrl}/contabilidad/planillas?fecha=2000-01-01`, {
+    headers: { cookie: accountingCookie },
+  });
+  assert.equal(emptyAccounting.status, 200);
+  assert.match(await emptyAccounting.text(), /No hay planillas para la fecha y agencia seleccionadas/);
+
+  const stateAfterAccountingGets = await readAccountingState();
+  assert.deepEqual(stateAfterAccountingGets, stateBeforeAccountingGets);
+
   const forbiddenApi = await fetch(`${baseUrl}/api/solicitudes/123/distribucion`, {
     headers: { cookie: accountingCookie },
   });

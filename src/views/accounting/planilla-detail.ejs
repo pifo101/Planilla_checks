@@ -4,33 +4,29 @@
   <%- include('../partials/sidebar') %>
   <main class="app-main">
     <a class="btn btn-sm btn-outline-secondary mb-3" href="/contabilidad/planillas"><i class="bi bi-arrow-left me-1"></i>Volver a planillas</a>
-    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-      <div><div class="page-eyebrow">Contabilidad</div><div class="d-flex flex-wrap align-items-center gap-2"><h1 class="h3 mb-1">Planilla <%= planilla.id %></h1><span class="status-badge status-<%= planilla.status.toLowerCase() %>"><i class="bi <%= planilla.status === 'PROCESADO' ? 'bi-check-circle-fill' : 'bi-clock-fill' %>"></i><%= planilla.status %></span></div><p class="text-muted mb-0">Detalle de solicitudes recibidas desde <%= planilla.agency %>.</p></div>
-      <div class="text-end"><span class="demo-label mb-2"><i class="bi bi-stars"></i> Datos de demostracion</span><button class="btn btn-primary d-block ms-auto" type="button" data-prototype-process <%= planilla.status === 'PROCESADO' ? 'disabled' : '' %>><i class="bi <%= planilla.status === 'PROCESADO' ? 'bi-lock' : 'bi-check2-circle' %> me-2"></i><%= planilla.status === 'PROCESADO' ? 'Planilla procesada' : 'Marcar como procesado' %></button></div>
-    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-4"><div><div class="page-eyebrow">Contabilidad</div><h1 class="h3 mb-1">Planilla <%= planilla.codigo %></h1><p class="text-muted mb-0">Detalle historico de solo lectura.</p></div><span class="status-badge status-<%= planilla.estado.toLowerCase() %>"><%= planilla.estado %></span></div>
 
     <section class="card mb-4" aria-labelledby="planilla-information-title"><div class="card-body p-4"><h2 class="h5 mb-3" id="planilla-information-title">Informacion de la planilla</h2><div class="row g-4">
-      <div class="col-6 col-lg"><div class="detail-label">Agencia</div><div class="fw-semibold"><%= planilla.agency %></div></div>
-      <div class="col-6 col-lg"><div class="detail-label">Fecha de envio</div><div class="fw-semibold"><%= planilla.date %></div></div>
-      <div class="col-6 col-lg"><div class="detail-label">Usuario que envio</div><div class="fw-semibold"><%= planilla.sentBy %></div></div>
-      <div class="col-6 col-lg"><div class="detail-label">Estado</div><div class="fw-semibold"><%= planilla.status %></div></div>
-      <div class="col-6 col-lg"><div class="detail-label">Solicitudes</div><div class="fw-semibold"><%= planilla.items.length %></div></div>
+      <div class="col-6 col-lg"><div class="detail-label">Agencia</div><div class="fw-semibold"><%= planilla.agenciaNombre %></div></div>
+      <div class="col-6 col-lg"><div class="detail-label">Numero de acta</div><div class="fw-semibold"><%= planilla.numeroActa || 'Sin asignar' %></div></div>
+      <div class="col-6 col-lg"><div class="detail-label">Fecha de creacion</div><div class="fw-semibold"><%= dateTime.format(planilla.fechaCreacion) %></div></div>
+      <div class="col-6 col-lg"><div class="detail-label">Fecha de envio</div><div class="fw-semibold"><%= dateTime.format(planilla.fechaEnvio) %></div></div>
+      <div class="col-6 col-lg"><div class="detail-label">Usuario creador</div><div class="fw-semibold"><%= planilla.creadaPor %></div></div>
+      <div class="col-6 col-lg"><div class="detail-label">Estado</div><div class="fw-semibold"><%= planilla.estado %></div></div>
     </div></div></section>
 
-    <div class="alert alert-info d-none" role="status" data-accounting-feedback></div>
-    <% if (planilla.status === 'PROCESADO') { %><div class="accounting-locked-note mb-3"><i class="bi bi-lock-fill"></i><span>Esta planilla esta procesada. Sus solicitudes se muestran en modo de consulta y no tienen operaciones disponibles.</span></div><% } %>
-
-    <section class="card mb-4" aria-labelledby="requests-table-title"><div class="card-header bg-white border-0 px-4 pt-4"><h2 class="h5 mb-0" id="requests-table-title">Detalle de solicitudes</h2></div><div class="table-responsive"><table class="table table-hover mb-0"><caption class="visually-hidden">Solicitudes incluidas en la planilla <%= planilla.id %></caption><thead><tr><th scope="col">Solicitud</th><th scope="col">Cliente</th><th scope="col">Aprobado</th><th scope="col">Cancelado</th><th scope="col">Descuentos</th><th scope="col">Monto cheque</th><th scope="col">Numero cheque</th><th scope="col">Metodologia</th><th scope="col">Estado</th></tr></thead><tbody>
-      <% planilla.items.forEach((item) => { %><tr class="<%= item.status === 'PROCESADO' ? 'accounting-row-processed' : '' %>"><td class="fw-semibold"><%= item.request %></td><td><%= item.client %></td><td class="text-nowrap"><%= currency.format(item.approved) %></td><td class="text-nowrap"><%= currency.format(item.canceled) %></td><td class="text-nowrap"><%= currency.format(item.discounts) %></td><td class="text-nowrap fw-semibold"><%= currency.format(item.checkAmount) %></td><td><%= item.checkNumber %></td><td><%= item.methodology %></td><td><span class="status-badge status-<%= item.status.toLowerCase() %>"><i class="bi <%= item.status === 'PROCESADO' ? 'bi-check-circle-fill' : 'bi-clock-fill' %>"></i><%= item.status %></span></td></tr><% }) %>
+    <section class="card mb-4" aria-labelledby="requests-table-title"><div class="card-header bg-white border-0 px-4 pt-4"><h2 class="h5 mb-0" id="requests-table-title">Solicitudes y miembros</h2></div><div class="table-responsive"><table class="table table-hover mb-0"><caption class="visually-hidden">Registros de la planilla <%= planilla.codigo %></caption><thead><tr><th>Solicitud</th><th>Miembro tecnico</th><th>Cliente</th><th>Aprobado</th><th>Cancelado</th><th>Descuentos</th><th>Monto cheque</th><th>Numero cheque</th><th>Metodologia</th><th>Estado</th><th>Procesado</th><th>Fecha procesamiento</th></tr></thead><tbody>
+      <% if (planilla.solicitudes.length === 0) { %><tr><td class="text-center text-muted py-5" colspan="12">Esta planilla no contiene registros.</td></tr><% } %>
+      <% planilla.solicitudes.forEach((item) => { %><tr class="<%= item.procesado ? 'accounting-row-processed' : '' %>"><td class="fw-semibold"><%= item.numeroSolicitud %></td><td><%= item.miembroId || '-' %></td><td><%= item.nombreCliente %></td><td class="text-nowrap"><%= sqlCurrency.format(item.montoAprobado) %></td><td class="text-nowrap"><%= sqlCurrency.format(item.montoCancelado) %></td><td class="text-nowrap"><%= sqlCurrency.format(item.descuentos) %></td><td class="text-nowrap fw-semibold"><%= sqlCurrency.format(item.montoCheque) %></td><td><%= item.numeroCheque %></td><td><%= item.metodologia || '-' %></td><td><span class="status-badge status-<%= item.estado.toLowerCase() %>"><%= item.estado %></span></td><td><%= item.procesado ? 'Si' : 'No' %></td><td class="text-nowrap"><%= item.fechaProcesado ? dateTime.format(item.fechaProcesado) : '-' %></td></tr><% }) %>
     </tbody></table></div></section>
 
     <section class="card accounting-totals" aria-labelledby="planilla-totals-title"><div class="card-body"><h2 class="visually-hidden" id="planilla-totals-title">Totales de la planilla</h2><div class="row g-3">
-      <div class="col-6 col-xl-3"><div class="detail-label">Total aprobado</div><div class="h5 mb-0"><%= currency.format(totals.approved) %></div></div>
-      <div class="col-6 col-xl-3"><div class="detail-label">Total cancelado</div><div class="h5 mb-0"><%= currency.format(totals.canceled) %></div></div>
-      <div class="col-6 col-xl-3"><div class="detail-label">Total descuentos</div><div class="h5 mb-0"><%= currency.format(totals.discounts) %></div></div>
-      <div class="col-6 col-xl-3"><div class="detail-label">Total monto cheque</div><div class="h5 mb-0 text-primary"><%= currency.format(totals.checks) %></div></div>
+      <div class="col-6 col-xl"><div class="detail-label">Registros</div><div class="h5 mb-0"><%= planilla.cantidadRegistros %></div></div>
+      <div class="col-6 col-xl"><div class="detail-label">Total aprobado</div><div class="h5 mb-0"><%= sqlCurrency.format(planilla.totalAprobado) %></div></div>
+      <div class="col-6 col-xl"><div class="detail-label">Total cancelado</div><div class="h5 mb-0"><%= sqlCurrency.format(planilla.totalCancelado) %></div></div>
+      <div class="col-6 col-xl"><div class="detail-label">Total descuentos</div><div class="h5 mb-0"><%= sqlCurrency.format(planilla.totalDescuentos) %></div></div>
+      <div class="col-6 col-xl"><div class="detail-label">Total monto cheque</div><div class="h5 mb-0 text-primary"><%= sqlCurrency.format(planilla.totalMontoCheque) %></div></div>
     </div></div></section>
   </main>
 </div>
-<script src="/js/accounting.js"></script>
 <%- include('../partials/footer') %>

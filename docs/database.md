@@ -53,6 +53,10 @@ El numero se captura manualmente, se recorta y admite de 1 a 50 caracteres sin c
 
 El historial del asistente consulta unicamente planillas enviadas de la agencia presente en la sesion revalidada. El listado usa el rango UTC correspondiente al dia calendario de `America/Guatemala`, pagina 20 filas y obtiene de SQL `COUNT` y `SUM` con `COALESCE` sobre `solicitudes_planilla`. El listado y detalle leen `planillas.numero_acta`, nunca el acta actualmente vigente. El detalle exige simultaneamente el ID de planilla y la agencia autorizada; una planilla ajena se comporta como inexistente.
 
+Contabilidad usa contratos separados para no debilitar el aislamiento del asistente. `findForAccounting` consulta los estados oficiales `ENVIADA`, `RECIBIDA` y `PROCESADA`, filtra por un rango parametrizado de `fecha_envio` y por una agencia opcional validada, agrega cada fila de `solicitudes_planilla` y pagina 20 planillas con `OFFSET/FETCH`. Un agregado separado en la misma consulta devuelve totales del conjunto filtrado, no solo de la pagina visible. `findAccountingDetail` admite cualquier agencia para un usuario `CONTABILIDAD` y devuelve los valores financieros, miembro tecnico, estado y datos de procesamiento persistidos.
+
+El selector de agencias de Contabilidad procede de `dbo.agencias`: incluye agencias activas y tambien inactivas que tengan planillas historicas en un estado no borrador. Los importes se agregan como `DECIMAL(18,2)` en SQL y se devuelven como texto decimal para no introducir aritmetica de punto flotante en Node.
+
 `POST /api/planillas` no acepta acta, agencia, usuario creador, codigo, estado, fechas ni montos libres como autoridad del navegador. El servicio trunca el instante al segundo para coincidir con `DATETIME2(0)`, calcula sobre ese mismo valor la fecha operativa en Guatemala, consulta el acta en SQL y rechaza el envio con `DAILY_ACTA_REQUIRED` si falta. Si existe, copia `numero_acta` a la nueva planilla. Las restricciones UNIQUE de solicitudes, cheques y codigo permanecen como defensa ante condiciones de carrera.
 
 `GET /api/acta-diaria` requiere autenticacion y consulta la fecha operativa actual sin usar agencia. `POST /api/acta-diaria` requiere rol `ASISTENTE`, acepta solo el dato manual `numeroActa` como autoridad y toma fecha y creador del servidor. Los errores SQL `2601/2627` de `UQ_actas_diarias_fecha` se convierten en `DAILY_ACTA_ALREADY_EXISTS` y, cuando es posible, incluyen el acta ganadora. No hay endpoints de actualizacion o eliminacion.
@@ -63,7 +67,7 @@ El historial del asistente consulta unicamente planillas enviadas de la agencia 
 
 Las reglas confirmadas de asociacion no requieren cambios de esquema: los montos resultantes ya se almacenan por fila de emision y el constraint compuesto sigue evitando duplicar la misma emision tecnica dentro de una solicitud.
 
-El borrador del navegador no es persistencia. El historial consultable del asistente ya usa SQL Server y es de solo lectura. La recepcion y el procesamiento de Contabilidad continuan pendientes.
+El borrador del navegador no es persistencia. Los historiales del asistente y de Contabilidad usan SQL Server y son de solo lectura. Consultar desde Contabilidad no ejecuta `UPDATE` ni representa una recepcion de dominio. Las transiciones de recepcion y procesamiento continuan pendientes.
 
 `DB_DATABASE` es obligatorio. `001_create_database.sql` es un bootstrap opcional y crea unicamente la base inicial predeterminada `PlanillaChecksDB`; una base con otro nombre debe existir previamente. Los scripts `002` a `005` no contienen `USE`: deben ejecutarse con `sqlcmd -d "NombreBase"` y operan exclusivamente sobre esa conexion seleccionada. La verificacion integral compara `DB_NAME()` con `DB_DATABASE` antes de crear datos temporales.
 

@@ -42,8 +42,14 @@ Reglas del flujo:
 29. Sin acta vigente se puede consultar historial y preparar el borrador, pero `Enviar planilla` se rechaza. Al cambiar de fecha no se hereda el acta anterior.
 30. En cada envio el servidor consulta nuevamente SQL y guarda `planillas.numero_acta` como snapshot. El navegador no controla el acta, fecha, creador ni agencia.
 31. `UNIQUE(actas_diarias.fecha)` decide las carreras concurrentes. El segundo intento no reemplaza al primero y recibe el acta vigente.
+32. El modulo de Contabilidad es exclusivo del rol `CONTABILIDAD` y permite consultar planillas de todas las agencias. `ASISTENTE` y `ADMIN` no adquieren acceso modificando la URL.
+33. El listado de Contabilidad incluye los estados oficiales no borrador `ENVIADA`, `RECIBIDA` y `PROCESADA`. Por defecto usa la fecha operativa actual de Guatemala y puede combinarla con una agencia valida.
+34. La fecha de Contabilidad se aplica sobre `fecha_envio` mediante el rango UTC semiabierto que corresponde al dia calendario de `America/Guatemala`.
+35. Cada fila de `solicitudes_planilla`, incluidos los miembros grupales con o sin cancelacion, contribuye una vez a los totales por planilla y a los totales del conjunto filtrado.
+36. El detalle de Contabilidad muestra los valores persistidos y el snapshot `planillas.numero_acta`; no consulta nuevamente el Web Service ni sustituye el acta historica con el acta vigente.
+37. Listar o abrir una planilla desde Contabilidad es una operacion de solo lectura. No cambia estados, `procesado`, fechas ni solicitudes.
 
 ## Pendientes de confirmacion del ingeniero
 
-1. El flujo real de recepcion/procesamiento de Contabilidad. Las planillas enviadas y el historial del asistente ya usan SQL Server, pero Contabilidad permanece fuera de alcance.
+1. El flujo de transicion y procesamiento de Contabilidad. La consulta de planillas recibidas ya usa SQL Server, pero siguen pendientes las acciones explicitas `ENVIADA -> RECIBIDA -> PROCESADA`, sus reglas y auditoria.
 2. La autoridad y el procedimiento excepcional para corregir un acta introducida incorrectamente. No existe correccion ordinaria en esta feature.
