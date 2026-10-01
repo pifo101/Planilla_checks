@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const planillaRepository = require('../repositories/planilla.repository');
+const agencyRepository = require('../repositories/agency.repository');
 const actaService = require('./acta.service');
 const { getOperationalDate, getOperationalDateRange, toSecondPrecision } = require('../utils/operational-date');
 const {
@@ -358,6 +359,28 @@ function requireAssistantAgency(user) {
   return user.agenciaId;
 }
 
+function requireAccounting(user) {
+  if (user?.rol !== 'CONTABILIDAD') {
+    throw new PlanillaError(
+      'ACCOUNTING_ROLE_REQUIRED',
+      'El usuario no tiene permiso para consultar las planillas recibidas.',
+      403,
+    );
+  }
+}
+
+function normalizeAccountingAgency(value) {
+  if (value == null || value === '') return null;
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) {
+    throw new PlanillaError('INVALID_AGENCY', 'Selecciona una agencia valida.');
+  }
+  const id = Number(value);
+  if (!Number.isSafeInteger(id)) {
+    throw new PlanillaError('INVALID_AGENCY', 'Selecciona una agencia valida.');
+  }
+  return id;
+}
+
 function normalizeHistoryDate(value, now = new Date()) {
   let selectedDate;
   try {
@@ -430,14 +453,58 @@ async function getSentPlanillaDetail(user, rawId) {
   return planillaRepository.findDetailForAgency(id, agenciaId);
 }
 
+async function listAccountingPlanillas(user, filters = {}, options = {}) {
+  requireAccounting(user);
+  const date = normalizeHistoryDate(filters.fecha, options.now ? options.now() : new Date());
+  const page = normalizePage(filters.page);
+  const agenciaId = normalizeAccountingAgency(filters.agencia);
+  const agencies = (await agencyRepository.findAvailableForAccounting()).map((agency) => ({
+    ...agency,
+    id: Number(agency.id),
+    activo: Boolean(agency.activo),
+  }));
+  if (agenciaId != null && !agencies.some((agency) => agency.id === agenciaId)) {
+    throw new PlanillaError('INVALID_AGENCY', 'Selecciona una agencia valida.');
+  }
+  const result = await planillaRepository.findForAccounting(
+    date.startDate,
+    date.endDate,
+    agenciaId,
+    page,
+    HISTORY_PAGE_SIZE,
+  );
+  const totalPages = Math.max(1, Math.ceil(result.total / HISTORY_PAGE_SIZE));
+  if (page > totalPages) {
+    throw new PlanillaError('INVALID_HISTORY_PAGE', 'La pagina solicitada no es valida.');
+  }
+  return {
+    ...result,
+    agencies,
+    selectedDate: date.selectedDate,
+    selectedAgencyId: agenciaId,
+    page,
+    pageSize: HISTORY_PAGE_SIZE,
+    totalPages,
+  };
+}
+
+async function getAccountingPlanillaDetail(user, rawId) {
+  requireAccounting(user);
+  const id = normalizePlanillaId(rawId);
+  return planillaRepository.findAccountingDetail(id);
+}
+
 module.exports = {
   HISTORY_PAGE_SIZE,
   MAX_SOLICITUDES,
   PlanillaError,
   createPlanilla,
   generatePlanillaCode,
+  getAccountingPlanillaDetail,
   getSentPlanillaDetail,
+  listAccountingPlanillas,
   listSentPlanillas,
+  normalizeAccountingAgency,
   normalizeHistoryDate,
   normalizePage,
   normalizePlanillaId,

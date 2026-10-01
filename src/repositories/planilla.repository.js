@@ -175,6 +175,104 @@ async function findDetailForAgency(id, agenciaId) {
   return { ...result.recordsets[0][0], solicitudes: result.recordsets[1] };
 }
 
+async function findForAccounting(startDate, endDate, agenciaId, page, pageSize) {
+  const pool = await getPool();
+  const offset = (page - 1) * pageSize;
+  const result = await pool.request()
+    .input('startDate', sql.DateTime2(0), startDate)
+    .input('endDate', sql.DateTime2(0), endDate)
+    .input('agenciaId', sql.Int, agenciaId)
+    .input('offset', sql.Int, offset)
+    .input('pageSize', sql.Int, pageSize)
+    .query(`
+      SELECT COUNT(*) AS total
+      FROM dbo.planillas AS p
+      WHERE p.estado IN ('ENVIADA', 'RECIBIDA', 'PROCESADA')
+        AND p.fecha_envio >= @startDate
+        AND p.fecha_envio < @endDate
+        AND (@agenciaId IS NULL OR p.agencia_id = @agenciaId);
+
+      SELECT COUNT(DISTINCT p.id) AS cantidadPlanillas,
+             COUNT(sp.id) AS cantidadRegistros,
+             COUNT(DISTINCT CASE WHEN p.estado = 'ENVIADA' THEN p.id END) AS cantidadEnviadas,
+             COUNT(DISTINCT CASE WHEN p.estado = 'RECIBIDA' THEN p.id END) AS cantidadRecibidas,
+             COUNT(DISTINCT CASE WHEN p.estado = 'PROCESADA' THEN p.id END) AS cantidadProcesadas,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_aprobado), CONVERT(DECIMAL(18, 2), 0))) AS totalAprobado,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cancelado), CONVERT(DECIMAL(18, 2), 0))) AS totalCancelado,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.descuentos), CONVERT(DECIMAL(18, 2), 0))) AS totalDescuentos,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cheque), CONVERT(DECIMAL(18, 2), 0))) AS totalMontoCheque
+      FROM dbo.planillas AS p
+      LEFT JOIN dbo.solicitudes_planilla AS sp ON sp.planilla_id = p.id
+      WHERE p.estado IN ('ENVIADA', 'RECIBIDA', 'PROCESADA')
+        AND p.fecha_envio >= @startDate
+        AND p.fecha_envio < @endDate
+        AND (@agenciaId IS NULL OR p.agencia_id = @agenciaId);
+
+      SELECT p.id, p.codigo, p.fecha_envio AS fechaEnvio, p.estado,
+             p.numero_acta AS numeroActa, a.id AS agenciaId, a.nombre AS agenciaNombre,
+             COUNT(sp.id) AS cantidadRegistros,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_aprobado), CONVERT(DECIMAL(18, 2), 0))) AS totalAprobado,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cancelado), CONVERT(DECIMAL(18, 2), 0))) AS totalCancelado,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.descuentos), CONVERT(DECIMAL(18, 2), 0))) AS totalDescuentos,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cheque), CONVERT(DECIMAL(18, 2), 0))) AS totalMontoCheque
+      FROM dbo.planillas AS p
+      INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
+      LEFT JOIN dbo.solicitudes_planilla AS sp ON sp.planilla_id = p.id
+      WHERE p.estado IN ('ENVIADA', 'RECIBIDA', 'PROCESADA')
+        AND p.fecha_envio >= @startDate
+        AND p.fecha_envio < @endDate
+        AND (@agenciaId IS NULL OR p.agencia_id = @agenciaId)
+      GROUP BY p.id, p.codigo, p.fecha_envio, p.estado, p.numero_acta, a.id, a.nombre
+      ORDER BY p.fecha_envio DESC, p.id DESC
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
+    `);
+
+  return {
+    total: Number(result.recordsets[0][0].total),
+    summary: result.recordsets[1][0],
+    planillas: result.recordsets[2],
+  };
+}
+
+async function findAccountingDetail(id) {
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('id', sql.BigInt, id)
+    .query(`
+      SELECT p.id, p.codigo, p.fecha_creacion AS fechaCreacion, p.fecha_envio AS fechaEnvio,
+             p.estado, p.numero_acta AS numeroActa, a.id AS agenciaId, a.nombre AS agenciaNombre,
+             u.id AS usuarioId, u.nombre AS creadaPor,
+             COUNT(sp.id) AS cantidadRegistros,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_aprobado), CONVERT(DECIMAL(18, 2), 0))) AS totalAprobado,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cancelado), CONVERT(DECIMAL(18, 2), 0))) AS totalCancelado,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.descuentos), CONVERT(DECIMAL(18, 2), 0))) AS totalDescuentos,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cheque), CONVERT(DECIMAL(18, 2), 0))) AS totalMontoCheque
+      FROM dbo.planillas AS p
+      INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
+      INNER JOIN dbo.usuarios AS u ON u.id = p.creada_por_usuario_id
+      LEFT JOIN dbo.solicitudes_planilla AS sp ON sp.planilla_id = p.id
+      WHERE p.id = @id AND p.estado IN ('ENVIADA', 'RECIBIDA', 'PROCESADA')
+      GROUP BY p.id, p.codigo, p.fecha_creacion, p.fecha_envio, p.estado,
+               p.numero_acta, a.id, a.nombre, u.id, u.nombre;
+
+      SELECT sp.id, sp.numero_solicitud AS numeroSolicitud, sp.miembro_id AS miembroId,
+             sp.nombre_cliente AS nombreCliente,
+             CONVERT(VARCHAR(40), sp.monto_aprobado) AS montoAprobado,
+             CONVERT(VARCHAR(40), sp.monto_cancelado) AS montoCancelado,
+             CONVERT(VARCHAR(40), sp.descuentos) AS descuentos,
+             CONVERT(VARCHAR(40), sp.monto_cheque) AS montoCheque, sp.numero_cheque AS numeroCheque,
+             sp.metodologia, sp.fecha_extraccion AS fechaExtraccion, sp.estado, sp.procesado,
+             sp.fecha_procesado AS fechaProcesado
+      FROM dbo.solicitudes_planilla AS sp
+      INNER JOIN dbo.planillas AS p ON p.id = sp.planilla_id
+      WHERE sp.planilla_id = @id AND p.estado IN ('ENVIADA', 'RECIBIDA', 'PROCESADA')
+      ORDER BY sp.id;
+    `);
+
+  if (!result.recordsets[0][0]) return null;
+  return { ...result.recordsets[0][0], solicitudes: result.recordsets[1] };
+}
+
 async function findSolicitudUsage(numeroSolicitud, numeroCheque) {
   const pool = await getPool();
   const result = await pool.request()
@@ -204,5 +302,7 @@ module.exports = {
   createWithSolicitudes,
   findSentByAgencyAndDate,
   findDetailForAgency,
+  findForAccounting,
+  findAccountingDetail,
   findSolicitudUsage,
 };
