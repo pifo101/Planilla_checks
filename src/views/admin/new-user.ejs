@@ -1,81 +1,60 @@
 <%- include('../partials/head') %>
-<main class="login-page d-flex align-items-center justify-content-center p-3 p-lg-4">
-  <section class="card create-account-card border-0 p-2 p-sm-4" aria-labelledby="create-account-title">
-    <div class="card-body">
-      <div class="d-flex align-items-center gap-3 mb-4">
-        <span class="brand-mark"><i class="bi bi-check2-square"></i></span>
-        <div>
-          <div class="fw-bold">Planilla Checks</div>
-          <span class="text-muted small">Registro de cuenta</span>
-        </div>
-      </div>
-
-      <div class="mb-4">
-        <h1 class="h3 mb-1" id="create-account-title">Crear cuenta</h1>
-        <p class="text-muted mb-2">Complete sus datos para crear una cuenta en Planilla Checks.</p>
-        <p class="small text-muted mb-0"><i class="bi bi-info-circle me-1"></i>Prototipo frontend: los datos todavia no se almacenan.</p>
-      </div>
-
-      <div class="alert alert-info d-none create-account-feedback" role="status" tabindex="-1" data-account-success>
-        <strong>Cuenta simulada correctamente.</strong> La conexion con backend esta pendiente.
-      </div>
-
-      <form data-account-form novalidate>
-        <div class="row g-3">
-          <div class="col-12 col-md-6">
-            <label class="form-label" for="email">Correo institucional <span class="required-mark" aria-hidden="true">*</span></label>
-            <input class="form-control" id="email" name="correo" type="email" autocomplete="email" aria-describedby="emailError" required>
-            <div class="invalid-feedback" id="emailError">Ingresa un correo institucional valido.</div>
-          </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label" for="fullName">Nombre completo <span class="required-mark" aria-hidden="true">*</span></label>
-            <input class="form-control" id="fullName" name="nombre" type="text" autocomplete="name" aria-describedby="fullNameError" required>
-            <div class="invalid-feedback" id="fullNameError">Ingresa el nombre completo.</div>
-          </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label" for="password">Contrasena <span class="required-mark" aria-hidden="true">*</span></label>
-            <div class="input-group has-validation">
-              <input class="form-control" id="password" type="password" autocomplete="new-password" aria-describedby="passwordError" required>
-              <button class="btn btn-outline-secondary password-toggle" type="button" data-password-toggle="password" aria-label="Mostrar contrasena" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
-              <div class="invalid-feedback" id="passwordError">Ingresa una contrasena.</div>
-            </div>
-          </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label" for="confirmPassword">Confirmar contrasena <span class="required-mark" aria-hidden="true">*</span></label>
-            <div class="input-group has-validation">
-              <input class="form-control" id="confirmPassword" type="password" autocomplete="new-password" aria-describedby="confirmPasswordError" required>
-              <button class="btn btn-outline-secondary password-toggle" type="button" data-password-toggle="confirmPassword" aria-label="Mostrar confirmacion de contrasena" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
-              <div class="invalid-feedback" id="confirmPasswordError">Confirma la contrasena.</div>
-            </div>
-          </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label" for="newAgency">Agencia <span class="required-mark" aria-hidden="true">*</span></label>
-            <select class="form-select" id="newAgency" name="agencia" aria-describedby="agencyError" required>
-              <option value="">Seleccionar agencia</option>
-              <% agencies.forEach((agency) => { %><option value="<%= agency.code %>"><%= agency.name %></option><% }) %>
-            </select>
-            <div class="invalid-feedback" id="agencyError">Selecciona una agencia.</div>
-          </div>
-          <div class="col-12 col-md-6">
-            <label class="form-label" for="newRole">Rol</label>
-            <select class="form-select" id="newRole" name="rol" aria-describedby="roleHelp roleError">
-              <option value="">Seleccione un rol</option>
-              <%# BACKEND: las opciones de rol seran proporcionadas posteriormente por la base de datos externa. %>
-            </select>
-            <div class="form-text" id="roleHelp">Las opciones de rol estaran disponibles al conectar el backend.</div>
-            <div class="invalid-feedback" id="roleError">Selecciona un rol.</div>
-          </div>
-        </div>
-
-        <button class="btn btn-primary btn-lg w-100 mt-4" type="button" data-account-submit><i class="bi bi-person-plus me-2"></i>Crear cuenta</button>
-      </form>
-
-      <div class="text-center mt-3">
-        <span class="small text-muted">Ya tiene una cuenta?</span>
-        <a class="small fw-semibold ms-1" href="/login">Iniciar sesion</a>
-      </div>
+<%- include('../partials/navbar') %>
+<div class="app-body">
+  <%- include('../partials/sidebar') %>
+  <main class="app-main">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+      <div><div class="page-eyebrow">Administracion</div><h1 class="h3 mb-1">Crear usuario</h1><p class="text-muted mb-0">Crea una cuenta institucional y asigna su acceso.</p></div>
+      <a class="btn btn-outline-secondary" href="/admin/usuarios"><i class="bi bi-arrow-left me-2"></i>Volver</a>
     </div>
-  </section>
-</main>
+
+    <section class="card">
+      <div class="card-body p-4">
+        <% if (typeof error !== 'undefined') { %><div class="alert alert-danger" role="alert"><%= error %></div><% } %>
+        <form action="/admin/usuarios" method="post" data-account-form novalidate>
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="fullName">Nombre completo <span class="required-mark" aria-hidden="true">*</span></label>
+              <input class="form-control" id="fullName" name="nombre" type="text" maxlength="150" value="<%= values.nombre || '' %>" autocomplete="name" required>
+              <div class="invalid-feedback">Ingresa el nombre completo.</div>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="email">Correo institucional <span class="required-mark" aria-hidden="true">*</span></label>
+              <input class="form-control" id="email" name="email" type="email" maxlength="254" value="<%= values.email || '' %>" placeholder="persona@adicla.org.gt" autocomplete="email" required>
+              <div class="invalid-feedback">Ingresa un correo @adicla.org.gt valido.</div>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="password">Contrasena <span class="required-mark" aria-hidden="true">*</span></label>
+              <div class="input-group has-validation">
+                <input class="form-control" id="password" name="password" type="password" minlength="12" autocomplete="new-password" required>
+                <button class="btn btn-outline-secondary password-toggle" type="button" data-password-toggle="password" aria-label="Mostrar contrasena" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
+                <div class="invalid-feedback">Usa al menos 12 caracteres.</div>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="confirmPassword">Confirmar contrasena <span class="required-mark" aria-hidden="true">*</span></label>
+              <div class="input-group has-validation">
+                <input class="form-control" id="confirmPassword" name="confirmPassword" type="password" minlength="12" autocomplete="new-password" required>
+                <button class="btn btn-outline-secondary password-toggle" type="button" data-password-toggle="confirmPassword" aria-label="Mostrar confirmacion de contrasena" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
+                <div class="invalid-feedback">Las contrasenas deben coincidir.</div>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="newRole">Rol <span class="required-mark" aria-hidden="true">*</span></label>
+              <select class="form-select" id="newRole" name="rol" data-access-role required><option value="">Seleccionar rol</option><% roles.forEach((role) => { %><option value="<%= role %>" <%= values.rol === role ? 'selected' : '' %>><%= roleLabels[role] %></option><% }) %></select>
+              <div class="invalid-feedback">Selecciona un rol.</div>
+            </div>
+            <div class="col-12 col-md-6" data-agency-field>
+              <label class="form-label" for="newAgency">Agencia <span class="required-mark" aria-hidden="true">*</span></label>
+              <select class="form-select" id="newAgency" name="agenciaId" data-access-agency><option value="">Seleccionar agencia</option><% agencies.forEach((agency) => { %><option value="<%= agency.id %>" <%= Number(values.agenciaId) === Number(agency.id) ? 'selected' : '' %>><%= agency.nombre %></option><% }) %></select>
+              <div class="invalid-feedback">Selecciona una agencia activa.</div>
+            </div>
+          </div>
+          <div class="d-flex justify-content-end mt-4"><button class="btn btn-primary btn-lg" type="submit"><i class="bi bi-person-plus me-2"></i>Crear usuario</button></div>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
 <script src="/js/admin.js"></script>
 <%- include('../partials/footer') %>

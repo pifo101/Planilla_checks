@@ -67,7 +67,7 @@ test('revalida un usuario activo y actualiza rol y agencia en la misma peticion'
   userRepository.findById = async (id) => {
     calls += 1;
     assert.equal(id, 10);
-    return currentUser({ rol: 'CONTABILIDAD', agenciaId: 21, agenciaNombre: 'Agencia nueva' });
+    return currentUser({ rol: 'CONTABILIDAD', agenciaId: null, agenciaNombre: null, agenciaActivo: null });
   };
   const req = request();
   const res = response();
@@ -75,7 +75,7 @@ test('revalida un usuario activo y actualiza rol y agencia en la misma peticion'
   assert.deepEqual(await runAuth(req, res), { continued: true, nextError: undefined });
   assert.equal(calls, 1);
   assert.equal(req.session.user.rol, 'CONTABILIDAD');
-  assert.equal(req.session.user.agenciaId, 21);
+  assert.equal(req.session.user.agenciaId, null);
   assert.deepEqual(res.locals.currentUser, req.session.user);
 
   requireRole('ASISTENTE')(req, res, () => assert.fail('No debe conservar el rol anterior'));
@@ -86,6 +86,7 @@ for (const [name, user] of [
   ['usuario desactivado', currentUser({ activo: false })],
   ['agencia desactivada', currentUser({ agenciaActivo: false })],
   ['asistente sin agencia', currentUser({ agenciaId: null, agenciaNombre: null, agenciaActivo: null })],
+  ['rol sin agencia permitida que conserva una agencia', currentUser({ rol: 'CONTABILIDAD' })],
   ['usuario eliminado', null],
 ]) {
   test(`invalida inmediatamente la sesion de ${name}`, async () => {

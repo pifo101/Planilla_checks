@@ -43,6 +43,25 @@ async function findById(id) {
   return result.recordset[0] || null;
 }
 
+async function findAll() {
+  const pool = await getPool();
+  const result = await pool.request().query(`
+    SELECT u.id,
+           u.nombre,
+           u.email,
+           u.rol,
+           u.agencia_id AS agenciaId,
+           u.activo,
+           u.created_at AS createdAt,
+           a.nombre AS agenciaNombre
+    FROM dbo.usuarios AS u
+    LEFT JOIN dbo.agencias AS a ON a.id = u.agencia_id
+    ORDER BY u.nombre, u.email;
+  `);
+
+  return result.recordset;
+}
+
 async function create({ nombre, email, passwordHash, rol, agenciaId = null, activo = true }) {
   const pool = await getPool();
   const result = await pool.request()
@@ -62,8 +81,31 @@ async function create({ nombre, email, passwordHash, rol, agenciaId = null, acti
   return result.recordset[0];
 }
 
+async function updateAdministration(id, { rol, agenciaId = null, activo }) {
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('id', sql.Int, id)
+    .input('rol', sql.VarChar(20), rol)
+    .input('agenciaId', sql.Int, agenciaId)
+    .input('activo', sql.Bit, activo)
+    .query(`
+      UPDATE dbo.usuarios
+      SET rol = @rol,
+          agencia_id = @agenciaId,
+          activo = @activo,
+          updated_at = SYSUTCDATETIME()
+      OUTPUT inserted.id, inserted.nombre, inserted.email, inserted.rol,
+             inserted.agencia_id AS agenciaId, inserted.activo
+      WHERE id = @id;
+    `);
+
+  return result.recordset[0] || null;
+}
+
 module.exports = {
+  findAll,
   findByEmail,
   findById,
   create,
+  updateAdministration,
 };

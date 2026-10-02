@@ -3,12 +3,13 @@ require('dotenv').config();
 const bcrypt = require('bcrypt');
 const { closePool } = require('../src/config/database');
 const userRepository = require('../src/repositories/user.repository');
+const { normalizeEmail } = require('../src/services/admin.service');
 
 const SALT_ROUNDS = 12;
 
 async function main() {
   const nombre = String(process.env.ADMIN_NAME || '').trim();
-  const email = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const email = normalizeEmail(process.env.ADMIN_EMAIL);
   const password = String(process.env.ADMIN_PASSWORD || '');
 
   if (!nombre || !email || !password) {

@@ -48,8 +48,16 @@ Reglas del flujo:
 35. Cada fila de `solicitudes_planilla`, incluidos los miembros grupales con o sin cancelacion, contribuye una vez a los totales por planilla y a los totales del conjunto filtrado.
 36. El detalle de Contabilidad muestra los valores persistidos y el snapshot `planillas.numero_acta`; no consulta nuevamente el Web Service ni sustituye el acta historica con el acta vigente.
 37. Listar o abrir una planilla desde Contabilidad es una operacion de solo lectura. No cambia estados, `procesado`, fechas ni solicitudes.
+38. Solo un usuario `ADMIN` autenticado puede listar, crear o modificar administrativamente usuarios. No existe auto-registro publico.
+39. Toda cuenta nueva usa un correo `@adicla.org.gt` normalizado a minusculas y una contrasena de al menos 12 caracteres almacenada con bcrypt y 12 rounds.
+40. `ASISTENTE` requiere una agencia activa. `ADMIN` y `CONTABILIDAD` no pertenecen a una agencia; el backend descarta cualquier agencia enviada para esos roles.
+41. La administracion permite cambiar solamente rol, agencia y estado. No edita nombre, correo ni contrasena y no elimina fisicamente usuarios.
+42. Un `ADMIN` no puede bloquearse ni quitarse su propio rol. No se ha confirmado una regla adicional de ultimo administrador activo.
+43. Bloqueos, cambios de rol y cambios de agencia se aplican en la siguiente peticion protegida porque la sesion se revalida contra SQL Server.
 
 ## Pendientes de confirmacion del ingeniero
 
 1. El flujo de transicion y procesamiento de Contabilidad. La consulta de planillas recibidas ya usa SQL Server, pero siguen pendientes las acciones explicitas `ENVIADA -> RECIBIDA -> PROCESADA`, sus reglas y auditoria.
 2. La autoridad y el procedimiento excepcional para corregir un acta introducida incorrectamente. No existe correccion ordinaria en esta feature.
+3. La regla empresarial para proteger al ultimo `ADMIN` activo ante cambios realizados por otro administrador.
+4. Proteccion CSRF general para formularios autenticados. Actualmente no existe un token CSRF dedicado.

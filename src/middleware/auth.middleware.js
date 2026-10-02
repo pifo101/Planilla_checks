@@ -29,8 +29,9 @@ async function requireAuth(req, res, next) {
       : null;
     const invalidAgency = user?.agenciaId != null && !user.agenciaActivo;
     const missingAssistantAgency = user?.rol === 'ASISTENTE' && user.agenciaId == null;
+    const unexpectedAgency = user?.rol !== 'ASISTENTE' && user?.agenciaId != null;
 
-    if (!user || !user.activo || invalidAgency || missingAssistantAgency) {
+    if (!user || !user.activo || invalidAgency || missingAssistantAgency || unexpectedAgency) {
       req.session.user = null;
       const destroyError = await destroySession(req);
       if (destroyError) console.error('No fue posible destruir una sesion invalidada:', destroyError);

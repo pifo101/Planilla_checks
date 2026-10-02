@@ -16,7 +16,7 @@ Usuario --- crea ActaDiaria (una por fecha global)
 ```
 
 - `agencias.id`, `usuarios.id`, `actas_diarias.id`, `planillas.id` y `solicitudes_planilla.id` son las claves primarias.
-- `usuarios.agencia_id` referencia `agencias.id` y es obligatorio para el rol `ASISTENTE`.
+- `usuarios.agencia_id` referencia `agencias.id`, es obligatorio para `ASISTENTE` y debe ser `NULL` para `ADMIN` y `CONTABILIDAD`.
 - `planillas.agencia_id` referencia `agencias.id`.
 - `planillas.creada_por_usuario_id` referencia `usuarios.id`.
 - `solicitudes_planilla.planilla_id` referencia `planillas.id`.
@@ -30,6 +30,7 @@ Usuario --- crea ActaDiaria (una por fecha global)
 - Los importes usan `DECIMAL(18,2)` y no admiten valores negativos.
 - El monto aprobado debe coincidir con descuentos, cheque y monto cancelado; el servicio lo calcula antes de insertar.
 - Los roles permitidos son `ADMIN`, `ASISTENTE` y `CONTABILIDAD`.
+- `CK_usuarios_rol_agencia` mantiene consistente la relacion rol/agencia. La aplicacion valida ademas que una agencia asignada a un asistente este activa.
 - Una solicitud marcada como procesada no puede modificarse ni eliminarse. El trigger permite el cambio inicial a procesada y bloquea cambios posteriores.
 - Una planilla que ya salio de borrador no puede eliminarse y debe tener fecha de envio.
 
@@ -51,6 +52,8 @@ El numero se captura manualmente, se recorta y admite de 1 a 50 caracteres sin c
 
 `src/config/database.js` mantiene un unico pool reutilizable de `mssql/msnodesqlv8`. Los repositorios contienen SQL parametrizado; los servicios aplican reglas que dependen del usuario autenticado. `planilla.repository.js` crea la planilla y todas sus solicitudes o miembros dentro de una transaccion, con rollback ante cualquier error. El envio usa estado `ENVIADA` y una fecha de envio generada en el servidor.
 
+`user.repository.js` lista usuarios sin seleccionar `password_hash`, crea cuentas y actualiza exclusivamente `rol`, `agencia_id`, `activo` y `updated_at` para Administracion. `agency.repository.js` obtiene agencias activas para asignacion y el directorio completo con cantidad de usuarios asociados. Todas las entradas variables usan parametros y tipos `mssql` explicitos.
+
 El historial del asistente consulta unicamente planillas enviadas de la agencia presente en la sesion revalidada. El listado usa el rango UTC correspondiente al dia calendario de `America/Guatemala`, pagina 20 filas y obtiene de SQL `COUNT` y `SUM` con `COALESCE` sobre `solicitudes_planilla`. El listado y detalle leen `planillas.numero_acta`, nunca el acta actualmente vigente. El detalle exige simultaneamente el ID de planilla y la agencia autorizada; una planilla ajena se comporta como inexistente.
 
 Contabilidad usa contratos separados para no debilitar el aislamiento del asistente. `findForAccounting` consulta los estados oficiales `ENVIADA`, `RECIBIDA` y `PROCESADA`, filtra por un rango parametrizado de `fecha_envio` y por una agencia opcional validada, agrega cada fila de `solicitudes_planilla` y pagina 20 planillas con `OFFSET/FETCH`. Un agregado separado en la misma consulta devuelve totales del conjunto filtrado, no solo de la pagina visible. `findAccountingDetail` admite cualquier agencia para un usuario `CONTABILIDAD` y devuelve los valores financieros, miembro tecnico, estado y datos de procesamiento persistidos.
@@ -65,11 +68,13 @@ El selector de agencias de Contabilidad procede de `dbo.agencias`: incluye agenc
 
 `database/005_daily_actas.sql` crea `actas_diarias` de forma incremental y no inventa actas para planillas historicas.
 
+`database/006_user_role_agency_constraint.sql` normaliza a `NULL` las agencias antiguas de `ADMIN`/`CONTABILIDAD` y agrega incrementalmente `CK_usuarios_rol_agencia`. No elimina usuarios ni modifica planillas.
+
 Las reglas confirmadas de asociacion no requieren cambios de esquema: los montos resultantes ya se almacenan por fila de emision y el constraint compuesto sigue evitando duplicar la misma emision tecnica dentro de una solicitud.
 
 El borrador del navegador no es persistencia. Los historiales del asistente y de Contabilidad usan SQL Server y son de solo lectura. Consultar desde Contabilidad no ejecuta `UPDATE` ni representa una recepcion de dominio. Las transiciones de recepcion y procesamiento continuan pendientes.
 
-`DB_DATABASE` es obligatorio. `001_create_database.sql` es un bootstrap opcional y crea unicamente la base inicial predeterminada `PlanillaChecksDB`; una base con otro nombre debe existir previamente. Los scripts `002` a `005` no contienen `USE`: deben ejecutarse con `sqlcmd -d "NombreBase"` y operan exclusivamente sobre esa conexion seleccionada. La verificacion integral compara `DB_NAME()` con `DB_DATABASE` antes de crear datos temporales.
+`DB_DATABASE` es obligatorio. `001_create_database.sql` es un bootstrap opcional y crea unicamente la base inicial predeterminada `PlanillaChecksDB`; una base con otro nombre debe existir previamente. Los scripts `002` a `006` no contienen `USE`: deben ejecutarse con `sqlcmd -d "NombreBase"` y operan exclusivamente sobre esa conexion seleccionada. La verificacion integral compara `DB_NAME()` con `DB_DATABASE` antes de crear datos temporales.
 
 Las pruebas de integracion exigen una base separada mediante `TEST_DB_DATABASE`. El nombre debe terminar en `TestDB`, ser distinto de `DB_DATABASE` y existir previamente. La suite no crea ni elimina bases. La configuracion TLS definitiva de SQL Server depende de la infraestructura de despliegue; el entorno actual usa SQL Server Express local.
 
