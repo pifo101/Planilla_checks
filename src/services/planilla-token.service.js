@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const config = require('../config');
+const { toSecondPrecision } = require('../utils/operational-date');
 
 const TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
 
@@ -23,13 +24,20 @@ function signature(encodedPayload, secret = config.sessionSecret) {
   return crypto.createHmac('sha256', secret).update(encodedPayload).digest('base64url');
 }
 
+function normalizeExtractionTimestamp(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  try {
+    return toSecondPrecision(date).toISOString();
+  } catch {
+    throw new SubmissionTokenError('Fecha de extraccion invalida para el envio.');
+  }
+}
+
 function createGroupFingerprint(memberIds, fechaExtraccion) {
   if (!Array.isArray(memberIds) || memberIds.length < 2) {
     throw new SubmissionTokenError('Snapshot grupal invalido.');
   }
-  const extractionTime = fechaExtraccion instanceof Date
-    ? fechaExtraccion.toISOString()
-    : String(fechaExtraccion || '');
+  const extractionTime = normalizeExtractionTimestamp(fechaExtraccion);
   const identities = memberIds.map((value) => String(value || '').trim()).sort();
   if (!extractionTime || identities.some((value) => !value)) {
     throw new SubmissionTokenError('Snapshot grupal invalido.');
@@ -46,6 +54,7 @@ function createSubmissionToken(userId, numeroSolicitud, distribution, options = 
     userId,
     expiresAt: now.getTime() + TOKEN_TTL_MS,
     numeroSolicitud,
+    fechaExtraccion: normalizeExtractionTimestamp(distribution.fechaExtraccion),
     cliente: distribution.cliente,
     metodologia: distribution.metodologia,
     montoAprobadoCentavos: toCents(distribution.montoAprobado),
@@ -94,6 +103,10 @@ function verifySubmissionToken(token, userId, options = {}) {
   if (![1, 2].includes(payload.version) || payload.userId !== userId
       || !Number.isSafeInteger(payload.expiresAt) || payload.expiresAt < now.getTime()) {
     throw new SubmissionTokenError('El token de la solicitud vencio o no pertenece al usuario autenticado.');
+  }
+  if (typeof payload.fechaExtraccion !== 'string'
+      || normalizeExtractionTimestamp(payload.fechaExtraccion) !== payload.fechaExtraccion) {
+    throw new SubmissionTokenError('Token de solicitud invalido.');
   }
   return payload;
 }

@@ -9,8 +9,8 @@ const { requireRole } = require('../middleware/role.middleware');
 const router = express.Router();
 
 router.use(requireAuth);
-router.get('/solicitudes/:numeroSolicitud/distribucion', requireRole('ASISTENTE', 'ADMIN'), getDistribution);
-router.get('/solicitudes/:numeroSolicitud/disponibilidad', requireRole('ASISTENTE', 'ADMIN'), checkAvailability);
+router.get('/solicitudes/:numeroSolicitud/distribucion', requireRole('ASISTENTE'), getDistribution);
+router.get('/solicitudes/:numeroSolicitud/disponibilidad', requireRole('ASISTENTE'), checkAvailability);
 router.get('/acta-diaria', getDailyActa);
 router.post('/acta-diaria', requireRole('ASISTENTE'), createDailyActa);
 router.post('/planillas', requireRole('ASISTENTE'), submitPlanilla);

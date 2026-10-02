@@ -30,3 +30,10 @@ test('el endpoint de envio exige especificamente el rol ASISTENTE', () => {
   const routes = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'api.routes.js'), 'utf8');
   assert.match(routes, /router\.post\('\/planillas', requireRole\('ASISTENTE'\), submitPlanilla\)/);
 });
+
+test('las APIs operativas de solicitud exigen especificamente el rol ASISTENTE', () => {
+  const routes = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'api.routes.js'), 'utf8');
+  assert.match(routes, /router\.get\('\/solicitudes\/:numeroSolicitud\/distribucion', requireRole\('ASISTENTE'\), getDistribution\)/);
+  assert.match(routes, /router\.get\('\/solicitudes\/:numeroSolicitud\/disponibilidad', requireRole\('ASISTENTE'\), checkAvailability\)/);
+  assert.doesNotMatch(routes, /requireRole\('ASISTENTE', 'ADMIN'\)/);
+});

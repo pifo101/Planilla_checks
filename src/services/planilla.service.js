@@ -97,6 +97,13 @@ function normalizeSolicitud(solicitud, userId, now) {
     throw new PlanillaError('INVALID_SUBMISSION_TOKEN', 'El token no corresponde a la solicitud enviada.');
   }
 
+  let fechaExtraccion;
+  try {
+    fechaExtraccion = toSecondPrecision(new Date(snapshot.fechaExtraccion));
+  } catch {
+    throw new PlanillaError('INVALID_SUBMISSION_TOKEN', 'Consulta nuevamente la solicitud antes de enviarla.');
+  }
+
   const nombreCliente = requireText(snapshot.cliente, 'cliente', 200);
   const metodologia = requireText(snapshot.metodologia, 'metodologia', 100);
   if (!['INDIVIDUAL', 'GRUPAL'].includes(metodologia)) {
@@ -140,6 +147,7 @@ function normalizeSolicitud(solicitud, userId, now) {
     montoCancelado: centsToAmount(montoCanceladoCents),
     descuentos: centsToAmount(descuentosCents),
     montoCheque: centsToAmount(montoChequeCents),
+    fechaExtraccion,
   };
 }
 
@@ -223,6 +231,7 @@ function sqlErrorDetails(error) {
 function duplicateKind(error) {
   const details = sqlErrorDetails(error);
   if (!details.numbers.some((number) => DUPLICATE_SQL_NUMBERS.has(number))) return null;
+  if (/PK_solicitudes_asignadas|UQ_solicitudes_asignadas/i.test(details.message)) return 'REQUEST';
   if (/UQ_solicitudes_numero_solicitud/i.test(details.message)) return 'REQUEST';
   if (/UQ_solicitudes_numero_solicitud_miembro/i.test(details.message)) return 'REQUEST';
   if (/UQ_solicitudes_numero_cheque/i.test(details.message)) return 'CHECK';
@@ -326,7 +335,6 @@ async function createPlanilla(user, submission, options = {}) {
   const codeFactory = options.generateCode || generatePlanillaCode;
   const snapshots = solicitudes.map((solicitud) => ({
     ...solicitud,
-    fechaExtraccion: now,
     estado: 'PENDIENTE',
   }));
 

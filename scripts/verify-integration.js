@@ -17,7 +17,7 @@ const planillaService = require('../src/services/planilla.service');
 const { createGroupFingerprint, createSubmissionToken } = require('../src/services/planilla-token.service');
 const planillaRepository = require('../src/repositories/planilla.repository');
 const actaService = require('../src/services/acta.service');
-const { getOperationalDate, getOperationalDateRange } = require('../src/utils/operational-date');
+const { getOperationalDate, getOperationalDateRange, toSecondPrecision } = require('../src/utils/operational-date');
 
 const suffix = `${Date.now()}${crypto.randomInt(1000, 9999)}`;
 const agencyCode = `TEST-${suffix}`.slice(0, 30);
@@ -220,6 +220,7 @@ async function main() {
     agenciaId: alternateAgencyId,
   };
   const integrationNow = new Date();
+  const extractionNow = toSecondPrecision(new Date(integrationNow.getTime() - (15 * 60 * 1000)));
   const operationalDate = getOperationalDate(integrationNow);
   assert.equal((await actaService.getCurrentActa({ now: () => integrationNow })).acta, null);
   const dailyActa = await actaService.createCurrentActa(
@@ -267,6 +268,7 @@ async function main() {
     metodologia: 'INDIVIDUAL',
   };
   solicitud.submissionToken = createSubmissionToken(serviceUser.id, solicitud.numeroSolicitud, {
+    fechaExtraccion: extractionNow,
     cliente: solicitud.cliente,
     metodologia: solicitud.metodologia,
     montoAprobado: solicitud.montoAprobadoCentavos / 100,
@@ -294,7 +296,7 @@ async function main() {
   assert.equal(createdPlanilla.estado, 'ENVIADA');
 
   const groupedRequestNumber = `6${suffix}`;
-  const groupedFingerprint = createGroupFingerprint(['19536', '19537'], integrationNow);
+  const groupedFingerprint = createGroupFingerprint(['19536', '19537'], extractionNow);
   const groupedRequests = ['19536', '19537'].map((miembroId, index) => {
     const numeroCheque = `GRP-${index}-${suffix}`;
     const montoCancelado = index === 0 ? 500 : 0;
@@ -303,6 +305,7 @@ async function main() {
       miembroId,
       numeroCheque,
       submissionToken: createSubmissionToken(serviceUser.id, groupedRequestNumber, {
+        fechaExtraccion: extractionNow,
         cliente: `Miembro temporal ${index + 1}`,
         metodologia: 'GRUPAL',
         miembroId,
@@ -327,6 +330,7 @@ async function main() {
       numeroSolicitud: alternateRequestNumber,
       numeroCheque: `ALT-${suffix}`,
       submissionToken: createSubmissionToken(alternateServiceUser.id, alternateRequestNumber, {
+        fechaExtraccion: extractionNow,
         cliente: 'Cliente agencia alterna', metodologia: 'INDIVIDUAL',
         montoAprobado: 1500, montoCancelado: 100, descuentos: 200, montoCheque: 1200,
       }, { now: () => integrationNow }),
@@ -334,6 +338,17 @@ async function main() {
   }, { now: () => integrationNow, generateCode: () => `PLN-ALT-${suffix}` });
   assert.equal(createdPlanilla.numeroActa, dailyActa.numeroActa);
   assert.equal(alternatePlanilla.numeroActa, dailyActa.numeroActa);
+  const persistedDates = await pool.request()
+    .input('planillaId', sql.BigInt, createdPlanilla.id)
+    .query(`
+      SELECT p.fecha_envio AS fechaEnvio, sp.fecha_extraccion AS fechaExtraccion
+      FROM dbo.planillas AS p
+      INNER JOIN dbo.solicitudes_planilla AS sp ON sp.planilla_id = p.id
+      WHERE p.id = @planillaId;
+    `);
+  assert.equal(persistedDates.recordset[0].fechaExtraccion.getTime(), extractionNow.getTime());
+  assert.equal(persistedDates.recordset[0].fechaEnvio.getTime(), toSecondPrecision(integrationNow).getTime());
+  assert.notEqual(persistedDates.recordset[0].fechaExtraccion.getTime(), persistedDates.recordset[0].fechaEnvio.getTime());
   const historyDate = operationalDate;
   const { startDate: historyStart, endDate: historyEnd } = getOperationalDateRange(historyDate);
   const agencyHistory = await planillaRepository.findSentByAgencyAndDate(
@@ -360,6 +375,7 @@ async function main() {
   assert.equal(groupedDetail.totalCancelado, '500.00');
   assert.equal(groupedDetail.numeroActa, dailyActa.numeroActa);
   assert.deepEqual(groupedDetail.solicitudes.map((item) => item.montoCancelado), ['500.00', '0.00']);
+  assert.ok(groupedDetail.solicitudes.every((item) => item.fechaExtraccion.getTime() === extractionNow.getTime()));
   assert.equal(await planillaRepository.findDetailForAgency(alternatePlanilla.id, agenciaId), null);
   const groupedRows = await pool.request()
     .input('numeroSolicitud', sql.NVarChar(50), groupedRequestNumber)
@@ -382,6 +398,7 @@ async function main() {
       numeroSolicitud: nextDayRequest,
       numeroCheque: `NEXT-${suffix}`,
       submissionToken: createSubmissionToken(serviceUser.id, nextDayRequest, {
+        fechaExtraccion: toSecondPrecision(new Date(nextDayNow.getTime() - 60_000)),
         cliente: 'Cliente fecha siguiente', metodologia: 'INDIVIDUAL',
         montoAprobado: 1000, montoCancelado: 0, descuentos: 100, montoCheque: 900,
       }, { now: () => nextDayNow }),
@@ -434,6 +451,141 @@ async function main() {
         (SELECT COUNT(*) FROM dbo.solicitudes_planilla WHERE numero_solicitud = @numeroSolicitud) AS miembros;
     `);
   assert.deepEqual(rolledBackGroup.recordset[0], { planillas: 0, miembros: 0 });
+
+  function concurrentPlanilla(codigo) {
+    return {
+      codigo,
+      agenciaId,
+      usuarioId: serviceUser.id,
+      fechaEnvio: integrationNow,
+      estado: 'ENVIADA',
+      numeroActa: dailyActa.numeroActa,
+    };
+  }
+  function concurrentMember(numeroSolicitud, miembroId, numeroCheque) {
+    return {
+      ...repositorySolicitud,
+      numeroSolicitud,
+      miembroId,
+      numeroCheque,
+      metodologia: miembroId ? 'GRUPAL' : 'INDIVIDUAL',
+      fechaExtraccion: extractionNow,
+    };
+  }
+  async function assertSingleConcurrentWinner(numeroSolicitud, firstMembers, secondMembers, codePrefix) {
+    const results = await Promise.allSettled([
+      planillaRepository.createWithSolicitudes(
+        concurrentPlanilla(`${codePrefix}-A-${suffix}`),
+        firstMembers.map((member, index) => concurrentMember(numeroSolicitud, member, `${codePrefix}-A-${index}-${suffix}`)),
+      ),
+      planillaRepository.createWithSolicitudes(
+        concurrentPlanilla(`${codePrefix}-B-${suffix}`),
+        secondMembers.map((member, index) => concurrentMember(numeroSolicitud, member, `${codePrefix}-B-${index}-${suffix}`)),
+      ),
+    ]);
+    assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+    assert.equal(results.filter((result) => result.status === 'rejected'
+      && [2601, 2627].includes(result.reason.number)).length, 1);
+
+    const state = await pool.request()
+      .input('numeroSolicitud', sql.NVarChar(50), numeroSolicitud)
+      .input('firstCode', sql.NVarChar(40), `${codePrefix}-A-${suffix}`)
+      .input('secondCode', sql.NVarChar(40), `${codePrefix}-B-${suffix}`)
+      .query(`
+        SELECT COUNT(*) AS planillas
+        FROM dbo.planillas
+        WHERE codigo IN (@firstCode, @secondCode);
+
+        SELECT COUNT(*) AS reservas
+        FROM dbo.solicitudes_asignadas
+        WHERE numero_solicitud = @numeroSolicitud;
+
+        SELECT COUNT(DISTINCT planilla_id) AS planillasConMiembros, COUNT(*) AS miembros
+        FROM dbo.solicitudes_planilla
+        WHERE numero_solicitud = @numeroSolicitud;
+      `);
+    assert.equal(state.recordsets[0][0].planillas, 1);
+    assert.equal(state.recordsets[1][0].reservas, 1);
+    assert.equal(state.recordsets[2][0].planillasConMiembros, 1);
+    return state.recordsets[2][0].miembros;
+  }
+
+  const concurrentIndividualRequest = `81${suffix}`;
+  assert.equal(await assertSingleConcurrentWinner(
+    concurrentIndividualRequest, [null], [null], 'PLN-CI',
+  ), 1);
+  await assert.rejects(
+    planillaRepository.createWithSolicitudes(
+      concurrentPlanilla(`PLN-CI-C-${suffix}`),
+      [concurrentMember(concurrentIndividualRequest, null, `CI-C-${suffix}`)],
+    ),
+    (error) => [2601, 2627].includes(error.number),
+  );
+
+  const concurrentSameGroupRequest = `82${suffix}`;
+  assert.equal(await assertSingleConcurrentWinner(
+    concurrentSameGroupRequest, ['A', 'B', 'C'], ['A', 'B', 'C'], 'PLN-CGS',
+  ), 3);
+  await assert.rejects(
+    planillaRepository.createWithSolicitudes(
+      concurrentPlanilla(`PLN-CGS-C-${suffix}`),
+      ['A', 'B', 'C'].map((member, index) => concurrentMember(
+        concurrentSameGroupRequest, member, `CGS-C-${index}-${suffix}`,
+      )),
+    ),
+    (error) => [2601, 2627].includes(error.number),
+  );
+
+  const concurrentDisjointGroupRequest = `83${suffix}`;
+  assert.equal(await assertSingleConcurrentWinner(
+    concurrentDisjointGroupRequest, ['A', 'B'], ['C', 'D'], 'PLN-CGD',
+  ), 2);
+  const disjointAvailability = await planillaRepository.findSolicitudUsage(
+    concurrentDisjointGroupRequest,
+    `UNUSED-${suffix}`,
+  );
+  assert.equal(disjointAvailability.solicitudUtilizada, true);
+  assert.equal(disjointAvailability.chequeUtilizado, false);
+  const concurrentRequestNumbers = [
+    concurrentIndividualRequest,
+    concurrentSameGroupRequest,
+    concurrentDisjointGroupRequest,
+  ];
+  await pool.request()
+    .input('individualRequest', sql.NVarChar(50), concurrentRequestNumbers[0])
+    .input('sameGroupRequest', sql.NVarChar(50), concurrentRequestNumbers[1])
+    .input('disjointGroupRequest', sql.NVarChar(50), concurrentRequestNumbers[2])
+    .query(`
+      DECLARE @concurrentPlanillas TABLE (id BIGINT PRIMARY KEY);
+
+      INSERT INTO @concurrentPlanillas (id)
+      SELECT planilla_id
+      FROM dbo.solicitudes_asignadas
+      WHERE numero_solicitud IN (@individualRequest, @sameGroupRequest, @disjointGroupRequest);
+
+      DELETE sp
+      FROM dbo.solicitudes_planilla AS sp
+      INNER JOIN @concurrentPlanillas AS cp ON cp.id = sp.planilla_id;
+
+      UPDATE p
+      SET estado = 'BORRADOR', fecha_envio = NULL
+      FROM dbo.planillas AS p
+      INNER JOIN @concurrentPlanillas AS cp ON cp.id = p.id;
+
+      DELETE p
+      FROM dbo.planillas AS p
+      INNER JOIN @concurrentPlanillas AS cp ON cp.id = p.id;
+    `);
+  const cleanedConcurrentFixtures = await pool.request()
+    .input('individualRequest', sql.NVarChar(50), concurrentRequestNumbers[0])
+    .input('sameGroupRequest', sql.NVarChar(50), concurrentRequestNumbers[1])
+    .input('disjointGroupRequest', sql.NVarChar(50), concurrentRequestNumbers[2])
+    .query(`
+      SELECT COUNT(*) AS reservas
+      FROM dbo.solicitudes_asignadas
+      WHERE numero_solicitud IN (@individualRequest, @sameGroupRequest, @disjointGroupRequest);
+    `);
+  assert.equal(cleanedConcurrentFixtures.recordset[0].reservas, 0);
 
   const lockTransaction = new sql.Transaction(pool);
   await lockTransaction.begin();
@@ -514,6 +666,12 @@ async function main() {
   const adminLogin = await login(baseUrl, adminEmail, password);
   assert.equal(adminLogin.status, 302);
   const adminCookie = adminLogin.headers.get('set-cookie').split(';', 1)[0];
+  assert.equal((await fetch(`${baseUrl}/api/solicitudes/invalida/distribucion`, {
+    headers: { cookie: adminCookie },
+  })).status, 403);
+  assert.equal((await fetch(`${baseUrl}/api/solicitudes/123/disponibilidad?numeroCheque=ADMIN-${suffix}`, {
+    headers: { cookie: adminCookie },
+  })).status, 403);
   await pool.request()
     .input('agenciaId', sql.Int, alternateAgencyId)
     .query('UPDATE dbo.agencias SET activo = 0 WHERE id = @agenciaId;');
@@ -670,6 +828,7 @@ async function main() {
         numeroSolicitud: `7${suffix}`,
         numeroCheque: `WEB-${suffix}`,
         submissionToken: createSubmissionToken(serviceUser.id, `7${suffix}`, {
+          fechaExtraccion: extractionNow,
           cliente: solicitud.cliente,
           metodologia: solicitud.metodologia,
           montoAprobado: solicitud.montoAprobadoCentavos / 100,
