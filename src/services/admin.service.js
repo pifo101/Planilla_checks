@@ -121,11 +121,48 @@ async function updateUser(idValue, payload, actor) {
   return user;
 }
 
+function numericSummary(row, fields) {
+  return Object.fromEntries(fields.map((field) => [field, Number(row?.[field] || 0)]));
+}
+
+async function getAdminDashboardSummary(actor) {
+  requireAdmin(actor);
+  const [userSummary, agencyData] = await Promise.all([
+    userRepository.findAdminDashboardSummary(),
+    agencyRepository.findAdminDashboardSummary(),
+  ]);
+
+  return {
+    users: numericSummary(userSummary, [
+      'totalUsuarios',
+      'usuariosActivos',
+      'usuariosBloqueados',
+      'administradores',
+      'asistentes',
+      'contabilidad',
+      'asistentesConAgencia',
+    ]),
+    agencies: numericSummary(agencyData.summary, [
+      'totalAgencias',
+      'agenciasActivas',
+      'agenciasInactivas',
+    ]),
+    assistantsByAgency: agencyData.assistantsByAgency.map((agency) => ({
+      id: Number(agency.id),
+      codigo: agency.codigo,
+      nombre: agency.nombre,
+      activo: Boolean(agency.activo),
+      asistentes: Number(agency.asistentes || 0),
+    })),
+  };
+}
+
 module.exports = {
   AdminError,
   ROLES,
   SALT_ROUNDS,
   createUser,
+  getAdminDashboardSummary,
   isDuplicateEmail,
   normalizeAccess,
   normalizeEmail,
