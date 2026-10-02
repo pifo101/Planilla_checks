@@ -54,6 +54,7 @@ Reglas del flujo:
 41. La administracion permite cambiar solamente rol, agencia y estado. No edita nombre, correo ni contrasena y no elimina fisicamente usuarios.
 42. Un `ADMIN` no puede bloquearse ni quitarse su propio rol. No se ha confirmado una regla adicional de ultimo administrador activo.
 43. Bloqueos, cambios de rol y cambios de agencia se aplican en la siguiente peticion protegida porque la sesion se revalida contra SQL Server.
+44. El dashboard es exclusivo de `ADMIN`, de solo lectura y resume mediante agregaciones SQL usuarios, estados, roles, agencias y asistentes asociados. No muestra actividad reciente porque no existe auditoria administrativa persistida.
 
 ## Pendientes de confirmacion del ingeniero
 

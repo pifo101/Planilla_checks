@@ -118,6 +118,8 @@ El login provisional fue reemplazado por consulta a SQL Server y `bcrypt.compare
 
 `admin.service.js` exige correo institucional `@adicla.org.gt`, nombre de hasta 150 caracteres, contrasena nueva de al menos 12 caracteres y confirmacion coincidente. Genera bcrypt con 12 rounds, normaliza el correo a minusculas y traduce conflictos UNIQUE de correo a un mensaje controlado. El administrador autenticado no puede bloquearse ni quitarse su propio rol. No existe por ahora una regla empresarial para impedir que otro administrador bloquee al ultimo ADMIN activo.
 
+El dashboard de `ADMIN` es de solo lectura y obtiene de SQL Server los totales de usuarios, estados, roles, agencias y la cantidad de asistentes asociados por agencia. No consulta planillas ni presenta una actividad administrativa reciente, porque todavia no existe una auditoria capaz de respaldar ese historial.
+
 La pantalla Nueva planilla consulta la distribucion mediante `GET /api/solicitudes/:numeroSolicitud/distribucion`. Express llama al Web Service externo, valida la respuesta y la normaliza antes de devolverla al navegador. Obtener datos no inserta registros SQL.
 
 Cada fecha operativa de `America/Guatemala` tiene una sola acta global, compartida por todas las agencias. El primer `ASISTENTE` del dia introduce manualmente el numero; los siguientes reutilizan el valor bloqueado. Sin acta se puede consultar y preparar un borrador, pero no enviarlo. El servidor vuelve a consultar el acta al enviar y guarda su numero como snapshot en la planilla. El acta no puede editarse durante el flujo ordinario; la correccion excepcional queda pendiente de una regla de autorizacion.
