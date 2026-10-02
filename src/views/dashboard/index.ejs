@@ -7,47 +7,87 @@
       <div>
         <div class="page-eyebrow">Resumen general</div>
         <h1 class="h3 mb-1">Dashboard administrativo</h1>
-        <p class="text-muted mb-0">Consulta el estado general de usuarios, agencias y planillas.</p>
+        <p class="text-muted mb-0">Consulta el estado actual de usuarios y agencias.</p>
       </div>
-      <span class="demo-label"><i class="bi bi-stars"></i> Datos de demostracion</span>
+      <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary" href="/admin/agencias"><i class="bi bi-buildings me-2"></i>Ver agencias</a>
+        <a class="btn btn-primary" href="/admin/usuarios/nuevo"><i class="bi bi-person-plus me-2"></i>Crear usuario</a>
+      </div>
     </div>
 
     <div class="row g-3 mb-4">
-      <% metrics.forEach((metric) => { %>
-        <div class="col-sm-6 col-xl-3">
-          <article class="card h-100">
-            <div class="card-body d-flex align-items-center justify-content-between gap-3">
-              <div>
-                <div class="text-muted small"><%= metric.label %></div>
-                <div class="h2 fw-semibold mb-1"><%= metric.value %></div>
-                <div class="small text-muted"><%= metric.detail %></div>
-              </div>
-              <span class="metric-icon bg-<%= metric.tone %>-subtle text-<%= metric.tone %>">
-                <i class="bi <%= metric.icon %>"></i>
-              </span>
-            </div>
-          </article>
-        </div>
-      <% }) %>
+      <div class="col-sm-6 col-xl-3">
+        <article class="card h-100">
+          <div class="card-body d-flex align-items-center justify-content-between gap-3">
+            <div><div class="text-muted small">Usuarios totales</div><div class="h2 fw-semibold mb-1" data-dashboard-total-users><%= summary.users.totalUsuarios %></div><div class="small text-muted"><span data-dashboard-active-users><%= summary.users.usuariosActivos %></span> activos</div></div>
+            <span class="metric-icon bg-primary-subtle text-primary"><i class="bi bi-people"></i></span>
+          </div>
+        </article>
+      </div>
+      <div class="col-sm-6 col-xl-3">
+        <article class="card h-100">
+          <div class="card-body d-flex align-items-center justify-content-between gap-3">
+            <div><div class="text-muted small">Usuarios bloqueados</div><div class="h2 fw-semibold mb-1" data-dashboard-blocked-users><%= summary.users.usuariosBloqueados %></div><div class="small text-muted">Sin acceso al sistema</div></div>
+            <span class="metric-icon bg-warning-subtle text-warning-emphasis"><i class="bi bi-person-lock"></i></span>
+          </div>
+        </article>
+      </div>
+      <div class="col-sm-6 col-xl-3">
+        <article class="card h-100">
+          <div class="card-body d-flex align-items-center justify-content-between gap-3">
+            <div><div class="text-muted small">Agencias</div><div class="h2 fw-semibold mb-1" data-dashboard-total-agencies><%= summary.agencies.totalAgencias %></div><div class="small text-muted"><span data-dashboard-active-agencies><%= summary.agencies.agenciasActivas %></span> activas, <span data-dashboard-inactive-agencies><%= summary.agencies.agenciasInactivas %></span> inactivas</div></div>
+            <span class="metric-icon bg-info-subtle text-info-emphasis"><i class="bi bi-buildings"></i></span>
+          </div>
+        </article>
+      </div>
+      <div class="col-sm-6 col-xl-3">
+        <article class="card h-100">
+          <div class="card-body d-flex align-items-center justify-content-between gap-3">
+            <div><div class="text-muted small">Asistentes asignados</div><div class="h2 fw-semibold mb-1" data-dashboard-assigned-assistants><%= summary.users.asistentesConAgencia %></div><div class="small text-muted">de <%= summary.users.asistentes %> asistentes</div></div>
+            <span class="metric-icon bg-success-subtle text-success"><i class="bi bi-person-workspace"></i></span>
+          </div>
+        </article>
+      </div>
     </div>
 
-    <section class="card">
-      <div class="card-header bg-white border-0 pt-4 px-4 d-flex justify-content-between align-items-center">
-        <h2 class="h5 mb-0">Actividad reciente</h2>
-        <a class="btn btn-sm btn-outline-primary" href="/admin/usuarios">Ver usuarios</a>
-      </div>
-      <div class="card-body px-4">
-        <% activities.forEach((activity, index) => { %>
-          <div class="d-flex gap-3 <%= index < activities.length - 1 ? 'border-bottom pb-3 mb-3' : '' %>">
-            <span class="activity-icon" aria-hidden="true"><i class="bi <%= activity.icon %>"></i></span>
-            <div>
-              <div class="fw-semibold"><%= activity.title %></div>
-              <div class="small text-muted"><%= activity.detail %></div>
-            </div>
+    <div class="row g-4">
+      <div class="col-12 col-xl-5">
+        <section class="card h-100" aria-labelledby="roles-title">
+          <div class="card-header bg-white border-0 pt-4 px-4"><h2 class="h5 mb-0" id="roles-title">Usuarios por rol</h2></div>
+          <div class="card-body px-4">
+            <% [
+              { key: 'ADMIN', label: 'Administradores', value: summary.users.administradores, icon: 'bi-shield-check' },
+              { key: 'ASISTENTE', label: 'Asistentes de agencia', value: summary.users.asistentes, icon: 'bi-person-workspace' },
+              { key: 'CONTABILIDAD', label: 'Contabilidad', value: summary.users.contabilidad, icon: 'bi-calculator' }
+            ].forEach((role, index, roles) => { %>
+              <div class="d-flex align-items-center justify-content-between gap-3 <%= index < roles.length - 1 ? 'border-bottom pb-3 mb-3' : '' %>">
+                <div class="d-flex align-items-center gap-3"><span class="activity-icon" aria-hidden="true"><i class="bi <%= role.icon %>"></i></span><span class="fw-semibold"><%= role.label %></span></div>
+                <span class="h4 mb-0" data-dashboard-role="<%= role.key %>"><%= role.value %></span>
+              </div>
+            <% }) %>
           </div>
-        <% }) %>
+          <div class="card-footer bg-white border-0 px-4 pb-4"><a class="btn btn-outline-primary w-100" href="/admin/usuarios">Gestionar usuarios</a></div>
+        </section>
       </div>
-    </section>
+
+      <div class="col-12 col-xl-7">
+        <section class="card h-100" aria-labelledby="agency-distribution-title">
+          <div class="card-header bg-white border-0 pt-4 px-4"><h2 class="h5 mb-0" id="agency-distribution-title">Asistentes por agencia</h2></div>
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <caption class="visually-hidden">Cantidad real de asistentes asociados por agencia</caption>
+              <thead><tr><th scope="col">Codigo</th><th scope="col">Agencia</th><th scope="col">Estado</th><th scope="col" class="text-end">Asistentes</th></tr></thead>
+              <tbody>
+                <% summary.assistantsByAgency.forEach((agency) => { %>
+                  <tr data-dashboard-agency><td><span class="agency-code"><%= agency.codigo %></span></td><td class="fw-semibold"><%= agency.nombre %></td><td><%= agency.activo ? 'Activa' : 'Inactiva' %></td><td class="text-end fw-semibold"><%= agency.asistentes %></td></tr>
+                <% }) %>
+                <% if (summary.assistantsByAgency.length === 0) { %><tr><td class="text-center text-muted py-5" colspan="4"><i class="bi bi-buildings d-block fs-3 mb-2"></i>No hay agencias registradas.</td></tr><% } %>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
   </main>
 </div>
 <%- include('../partials/footer') %>

@@ -514,6 +514,55 @@ async function main() {
   const adminLogin = await login(baseUrl, adminEmail, password);
   assert.equal(adminLogin.status, 302);
   const adminCookie = adminLogin.headers.get('set-cookie').split(';', 1)[0];
+  await pool.request()
+    .input('agenciaId', sql.Int, alternateAgencyId)
+    .query('UPDATE dbo.agencias SET activo = 0 WHERE id = @agenciaId;');
+  const dashboardExpectedResult = await pool.request().query(`
+    SELECT COUNT(*) AS totalUsuarios,
+           COALESCE(SUM(CASE WHEN activo = 1 THEN 1 ELSE 0 END), 0) AS usuariosActivos,
+           COALESCE(SUM(CASE WHEN activo = 0 THEN 1 ELSE 0 END), 0) AS usuariosBloqueados,
+           COALESCE(SUM(CASE WHEN rol = 'ADMIN' THEN 1 ELSE 0 END), 0) AS administradores,
+           COALESCE(SUM(CASE WHEN rol = 'ASISTENTE' THEN 1 ELSE 0 END), 0) AS asistentes,
+           COALESCE(SUM(CASE WHEN rol = 'CONTABILIDAD' THEN 1 ELSE 0 END), 0) AS contabilidad,
+           COALESCE(SUM(CASE WHEN rol = 'ASISTENTE' AND agencia_id IS NOT NULL THEN 1 ELSE 0 END), 0)
+             AS asistentesConAgencia
+    FROM dbo.usuarios;
+
+    SELECT COUNT(*) AS totalAgencias,
+           COALESCE(SUM(CASE WHEN activo = 1 THEN 1 ELSE 0 END), 0) AS agenciasActivas,
+           COALESCE(SUM(CASE WHEN activo = 0 THEN 1 ELSE 0 END), 0) AS agenciasInactivas
+    FROM dbo.agencias;
+  `);
+  const expectedUsers = dashboardExpectedResult.recordsets[0][0];
+  const expectedAgencies = dashboardExpectedResult.recordsets[1][0];
+  const dashboardResponse = await fetch(`${baseUrl}/dashboard`, { headers: { cookie: adminCookie } });
+  assert.equal(dashboardResponse.status, 200);
+  const dashboardHtml = await dashboardResponse.text();
+  for (const [attribute, expected] of [
+    ['data-dashboard-total-users', expectedUsers.totalUsuarios],
+    ['data-dashboard-active-users', expectedUsers.usuariosActivos],
+    ['data-dashboard-blocked-users', expectedUsers.usuariosBloqueados],
+    ['data-dashboard-total-agencies', expectedAgencies.totalAgencias],
+    ['data-dashboard-active-agencies', expectedAgencies.agenciasActivas],
+    ['data-dashboard-inactive-agencies', expectedAgencies.agenciasInactivas],
+    ['data-dashboard-assigned-assistants', expectedUsers.asistentesConAgencia],
+  ]) {
+    assert.match(dashboardHtml, new RegExp(`${attribute}[^>]*>${expected}<`));
+  }
+  for (const [role, expected] of [
+    ['ADMIN', expectedUsers.administradores],
+    ['ASISTENTE', expectedUsers.asistentes],
+    ['CONTABILIDAD', expectedUsers.contabilidad],
+  ]) {
+    assert.match(dashboardHtml, new RegExp(`data-dashboard-role="${role}"[^>]*>${expected}<`));
+  }
+  assert.match(dashboardHtml, new RegExp(`Agencia temporal ${suffix}`));
+  assert.match(dashboardHtml, new RegExp(`Agencia alterna ${suffix}`));
+  assert.match(dashboardHtml, /Inactiva/);
+  assert.doesNotMatch(dashboardHtml, /Datos de demostracion|Actividad reciente|password_hash/i);
+  await pool.request()
+    .input('agenciaId', sql.Int, alternateAgencyId)
+    .query('UPDATE dbo.agencias SET activo = 1 WHERE id = @agenciaId;');
   const adminUsersPage = await fetch(`${baseUrl}/admin/usuarios`, { headers: { cookie: adminCookie } });
   assert.equal(adminUsersPage.status, 200);
   const adminUsersHtml = await adminUsersPage.text();
@@ -542,6 +591,9 @@ async function main() {
   const managedAssistantLogin = await login(baseUrl, managedAssistantEmail, password);
   assert.equal(managedAssistantLogin.status, 302);
   const managedAssistantCookie = managedAssistantLogin.headers.get('set-cookie').split(';', 1)[0];
+  assert.equal((await fetch(`${baseUrl}/dashboard`, {
+    headers: { cookie: managedAssistantCookie }, redirect: 'manual',
+  })).status, 403);
   assert.equal((await postForm(`${baseUrl}/admin/usuarios`, managedAssistantCookie, {
     nombre: 'No autorizado', email: `forbidden-${suffix}@adicla.org.gt`, password,
     confirmPassword: password, rol: 'ADMIN', agenciaId: '',
@@ -578,6 +630,9 @@ async function main() {
   assert.equal(managedAccountingResult.recordset[0].agenciaId, null);
   const managedAccountingLogin = await login(baseUrl, managedAccountingEmail, password);
   const managedAccountingCookie = managedAccountingLogin.headers.get('set-cookie').split(';', 1)[0];
+  assert.equal((await fetch(`${baseUrl}/dashboard`, {
+    headers: { cookie: managedAccountingCookie }, redirect: 'manual',
+  })).status, 403);
   assert.equal((await postForm(`${baseUrl}/admin/usuarios/${managedAssistant.id}`, managedAccountingCookie, {
     rol: 'ASISTENTE', agenciaId: String(agenciaId), activo: 'true',
   })).status, 403);

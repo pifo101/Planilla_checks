@@ -47,6 +47,33 @@ async function findAll() {
   return result.recordset;
 }
 
+async function findAdminDashboardSummary() {
+  const pool = await getPool();
+  const result = await pool.request().query(`
+    SELECT COUNT(*) AS totalAgencias,
+           COALESCE(SUM(CASE WHEN activo = 1 THEN 1 ELSE 0 END), 0) AS agenciasActivas,
+           COALESCE(SUM(CASE WHEN activo = 0 THEN 1 ELSE 0 END), 0) AS agenciasInactivas
+    FROM dbo.agencias;
+
+    SELECT a.id,
+           a.codigo,
+           a.nombre,
+           a.activo,
+           COUNT(u.id) AS asistentes
+    FROM dbo.agencias AS a
+    LEFT JOIN dbo.usuarios AS u
+      ON u.agencia_id = a.id
+     AND u.rol = 'ASISTENTE'
+    GROUP BY a.id, a.codigo, a.nombre, a.activo
+    ORDER BY a.nombre;
+  `);
+
+  return {
+    summary: result.recordsets[0][0],
+    assistantsByAgency: result.recordsets[1],
+  };
+}
+
 async function findById(id) {
   const pool = await getPool();
   const result = await pool.request()
@@ -62,6 +89,7 @@ async function findById(id) {
 
 module.exports = {
   findAll,
+  findAdminDashboardSummary,
   findActive,
   findAvailableForAccounting,
   findById,

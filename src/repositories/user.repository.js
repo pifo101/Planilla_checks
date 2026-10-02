@@ -62,6 +62,23 @@ async function findAll() {
   return result.recordset;
 }
 
+async function findAdminDashboardSummary() {
+  const pool = await getPool();
+  const result = await pool.request().query(`
+    SELECT COUNT(*) AS totalUsuarios,
+           COALESCE(SUM(CASE WHEN activo = 1 THEN 1 ELSE 0 END), 0) AS usuariosActivos,
+           COALESCE(SUM(CASE WHEN activo = 0 THEN 1 ELSE 0 END), 0) AS usuariosBloqueados,
+           COALESCE(SUM(CASE WHEN rol = 'ADMIN' THEN 1 ELSE 0 END), 0) AS administradores,
+           COALESCE(SUM(CASE WHEN rol = 'ASISTENTE' THEN 1 ELSE 0 END), 0) AS asistentes,
+           COALESCE(SUM(CASE WHEN rol = 'CONTABILIDAD' THEN 1 ELSE 0 END), 0) AS contabilidad,
+           COALESCE(SUM(CASE WHEN rol = 'ASISTENTE' AND agencia_id IS NOT NULL THEN 1 ELSE 0 END), 0)
+             AS asistentesConAgencia
+    FROM dbo.usuarios;
+  `);
+
+  return result.recordset[0];
+}
+
 async function create({ nombre, email, passwordHash, rol, agenciaId = null, activo = true }) {
   const pool = await getPool();
   const result = await pool.request()
@@ -104,6 +121,7 @@ async function updateAdministration(id, { rol, agenciaId = null, activo }) {
 
 module.exports = {
   findAll,
+  findAdminDashboardSummary,
   findByEmail,
   findById,
   create,

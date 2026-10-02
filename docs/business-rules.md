@@ -54,12 +54,16 @@ Reglas del flujo:
 41. La administracion permite cambiar solamente rol, agencia y estado. No edita nombre, correo ni contrasena y no elimina fisicamente usuarios.
 42. Un `ADMIN` no puede bloquearse ni quitarse su propio rol. No se ha confirmado una regla adicional de ultimo administrador activo.
 43. Bloqueos, cambios de rol y cambios de agencia se aplican en la siguiente peticion protegida porque la sesion se revalida contra SQL Server.
+<<<<<<< HEAD
 44. Solo `CONTABILIDAD` puede decidir traslado. `ASISTENTE`, `ADMIN` y usuarios no autenticados no pueden hacerlo; fecha y usuario proceden del servidor.
 45. `Trasladada` registra que Contabilidad traslado la planilla al proceso posterior. No aprueba creditos, solicitudes o desembolsos.
 46. `No trasladada` registra unicamente que la planilla no fue trasladada. No rechaza creditos ni devuelve solicitudes a una agencia.
 47. La primera decision gana mediante un `UPDATE` atomico condicionado por `trasladado IS NULL`. Una decision existente no se edita mediante el flujo normal.
 48. El historial general contiene `trasladado IS NOT NULL` y filtra por el dia de `fecha_decision_traslado` en `America/Guatemala`, agencia y resultado. `fecha_envio` permanece visible.
 49. `ENVIADA`, `RECIBIDA` y `PROCESADA` siguen siendo estados tecnicos legados de `planillas`; `RECIBIDA` y `PROCESADA` no representan la decision de traslado y esta feature no los modifica.
+=======
+44. El dashboard es exclusivo de `ADMIN`, de solo lectura y resume mediante agregaciones SQL usuarios, estados, roles, agencias y asistentes asociados. No muestra actividad reciente porque no existe auditoria administrativa persistida.
+>>>>>>> origin/main
 
 ## Pendientes de confirmacion del ingeniero
 
