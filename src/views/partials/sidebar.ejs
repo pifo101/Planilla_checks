@@ -24,7 +24,10 @@
     <% if (showDemoNavigation || navigationRole === 'CONTABILIDAD') { %>
       <div class="sidebar-label">CONTABILIDAD</div>
       <a class="sidebar-link <%= currentPath.startsWith('/contabilidad/planillas') ? 'active' : '' %>" href="/contabilidad/planillas" <%- currentPath.startsWith('/contabilidad/planillas') ? 'aria-current="page"' : '' %>>
-        <i class="bi bi-inbox"></i><span>Planillas recibidas</span>
+        <i class="bi bi-inbox"></i><span>Pendientes de traslado</span>
+      </a>
+      <a class="sidebar-link <%= currentPath.startsWith('/contabilidad/historial') ? 'active' : '' %>" href="/contabilidad/historial" <%- currentPath.startsWith('/contabilidad/historial') ? 'aria-current="page"' : '' %>>
+        <i class="bi bi-clock-history"></i><span>Historial de traslados</span>
       </a>
     <% } %>
 

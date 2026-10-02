@@ -3,51 +3,42 @@
 <div class="app-body">
   <%- include('../partials/sidebar') %>
   <main class="app-main">
-    <div class="mb-4"><div class="page-eyebrow">Contabilidad</div><h1 class="h3 mb-1">Planillas recibidas</h1><p class="text-muted mb-0">Consulta de solo lectura de las planillas enviadas por todas las agencias.</p></div>
+    <div class="mb-4"><div class="page-eyebrow">Contabilidad</div><h1 class="h3 mb-1">Pendientes de traslado</h1><p class="text-muted mb-0">Planillas pendientes de decision, sin limite por fecha de envio.</p></div>
 
-    <section class="card mb-4" aria-labelledby="accounting-filters-title">
-      <div class="card-body p-4">
-        <h2 class="visually-hidden" id="accounting-filters-title">Filtros de planillas recibidas</h2>
-        <form class="row g-3 align-items-end" method="get">
-          <div class="col-sm-6 col-lg-4"><label class="form-label" for="fecha">Fecha de envio</label><input class="form-control" id="fecha" name="fecha" type="date" value="<%= selectedDate %>" required></div>
-          <div class="col-sm-6 col-lg-4"><label class="form-label" for="agencia">Agencia</label><select class="form-select" id="agencia" name="agencia"><option value="">Todas las agencias</option><% agencies.forEach((agency) => { %><option value="<%= agency.id %>" <%= selectedAgencyId === agency.id ? 'selected' : '' %>><%= agency.nombre %><%= agency.activo ? '' : ' (inactiva)' %></option><% }) %></select></div>
-          <div class="col-auto"><button class="btn btn-primary" type="submit"><i class="bi bi-funnel me-2"></i>Filtrar</button></div>
-          <div class="col-auto"><a class="btn btn-outline-secondary" href="/contabilidad/planillas">Hoy</a></div>
-        </form>
-      </div>
-    </section>
+    <section class="card mb-4" aria-labelledby="accounting-filters-title"><div class="card-body p-4">
+      <h2 class="visually-hidden" id="accounting-filters-title">Filtros de pendientes</h2>
+      <form class="row g-3 align-items-end" method="get">
+        <div class="col-sm-8 col-lg-5"><label class="form-label" for="agencia">Agencia de origen</label><select class="form-select" id="agencia" name="agencia"><option value="">Todas las agencias</option><% agencies.forEach((agency) => { %><option value="<%= agency.id %>" <%= selectedAgencyId === agency.id ? 'selected' : '' %>><%= agency.nombre %><%= agency.activo ? '' : ' (inactiva)' %></option><% }) %></select></div>
+        <div class="col-auto"><button class="btn btn-primary" type="submit"><i class="bi bi-funnel me-2"></i>Filtrar</button></div>
+        <div class="col-auto"><a class="btn btn-outline-secondary" href="/contabilidad/planillas">Limpiar</a></div>
+      </form>
+    </div></section>
 
     <div class="row g-3 mb-4">
-      <% [
-        { label: 'Planillas', value: summary.cantidadPlanillas, icon: 'bi-inbox' },
-        { label: 'Solicitudes / miembros', value: summary.cantidadRegistros, icon: 'bi-files' },
-        { label: 'Enviadas', value: summary.cantidadEnviadas, icon: 'bi-send' },
-        { label: 'Procesadas', value: summary.cantidadProcesadas, icon: 'bi-check2-circle' }
-      ].forEach((metric) => { %>
-        <div class="col-6 col-xl-3"><article class="card accounting-summary-card h-100"><div class="card-body d-flex align-items-center gap-3"><span class="metric-icon bg-primary-subtle text-primary"><i class="bi <%= metric.icon %>"></i></span><div><div class="text-muted small"><%= metric.label %></div><div class="h3 mb-0"><%= metric.value %></div></div></div></article></div>
-      <% }) %>
+      <div class="col-6 col-xl-3"><article class="card accounting-summary-card h-100"><div class="card-body"><div class="text-muted small">Planillas pendientes</div><div class="h3 mb-0"><%= summary.cantidadPlanillas %></div></div></article></div>
+      <div class="col-6 col-xl-3"><article class="card accounting-summary-card h-100"><div class="card-body"><div class="text-muted small">Solicitudes / miembros</div><div class="h3 mb-0"><%= summary.cantidadRegistros %></div></div></article></div>
+      <div class="col-6 col-xl"><article class="card h-100"><div class="card-body"><div class="text-muted small">Total aprobado</div><div class="h5 mb-0"><%= sqlCurrency.format(summary.totalAprobado) %></div></div></article></div>
+      <div class="col-6 col-xl"><article class="card h-100"><div class="card-body"><div class="text-muted small">Total cancelado</div><div class="h5 mb-0"><%= sqlCurrency.format(summary.totalCancelado) %></div></div></article></div>
+      <div class="col-6 col-xl"><article class="card h-100"><div class="card-body"><div class="text-muted small">Descuentos</div><div class="h5 mb-0"><%= sqlCurrency.format(summary.totalDescuentos) %></div></div></article></div>
+      <div class="col-6 col-xl"><article class="card h-100"><div class="card-body"><div class="text-muted small">Monto cheque</div><div class="h5 mb-0"><%= sqlCurrency.format(summary.totalMontoCheque) %></div></div></article></div>
     </div>
 
-    <section class="mb-4" aria-labelledby="financial-summary-title">
-      <h2 class="h6 mb-2" id="financial-summary-title">Totales del conjunto filtrado</h2>
-      <div class="card"><div class="card-body"><div class="row g-3 accounting-financial-summary">
-        <div class="col-6 col-xl-3"><div class="text-muted small">Total aprobado</div><div class="h5 mb-0"><%= sqlCurrency.format(summary.totalAprobado) %></div></div>
-        <div class="col-6 col-xl-3"><div class="text-muted small">Total cancelado</div><div class="h5 mb-0"><%= sqlCurrency.format(summary.totalCancelado) %></div></div>
-        <div class="col-6 col-xl-3"><div class="text-muted small">Total descuentos</div><div class="h5 mb-0"><%= sqlCurrency.format(summary.totalDescuentos) %></div></div>
-        <div class="col-6 col-xl-3"><div class="text-muted small">Total monto cheque</div><div class="h5 mb-0"><%= sqlCurrency.format(summary.totalMontoCheque) %></div></div>
-      </div></div></div>
-    </section>
+    <% if (planillas.length === 0) { %>
+      <section class="card"><div class="card-body text-center text-muted py-5"><i class="bi bi-inbox d-block fs-3 mb-2"></i>No hay planillas pendientes de decision.</div></section>
+    <% } %>
+    <% const agencyGroups = planillas.reduce((groups, item) => { const last = groups[groups.length - 1]; if (last && last.id === item.agenciaId) last.planillas.push(item); else groups.push({ id: item.agenciaId, nombre: item.agenciaNombre, planillas: [item] }); return groups; }, []); %>
+    <% agencyGroups.forEach((group) => { %>
+      <section class="card mb-4" aria-labelledby="agency-<%= group.id %>">
+        <div class="card-header bg-white px-4 py-3"><div class="page-eyebrow mb-1">Agencia de origen</div><h2 class="h5 mb-0" id="agency-<%= group.id %>"><%= group.nombre %></h2></div>
+        <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Codigo / acta</th><th>Fecha de envio</th><th>Registros</th><th>Aprobado</th><th>Cancelado</th><th>Descuentos</th><th>Monto cheque</th><th class="text-end">Decision de planilla completa</th></tr></thead><tbody>
+          <% group.planillas.forEach((planilla) => { %><tr><td><div class="fw-semibold"><%= planilla.codigo %></div><div class="small text-muted"><%= planilla.numeroActa || 'Sin acta' %></div></td><td class="text-nowrap"><%= dateTime.format(planilla.fechaEnvio) %></td><td><%= planilla.cantidadRegistros %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalAprobado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalCancelado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalDescuentos) %></td><td class="text-nowrap fw-semibold"><%= sqlCurrency.format(planilla.totalMontoCheque) %></td><td class="text-end"><div class="d-flex flex-wrap justify-content-end gap-2"><a class="btn btn-sm btn-outline-secondary" href="/contabilidad/planillas/<%= planilla.id %>"><i class="bi bi-eye me-1"></i>Detalle</a><form method="post" action="/contabilidad/planillas/<%= planilla.id %>/traslado" onsubmit="return confirm('¿Confirmar que esta planilla fue trasladada?');"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="trasladado" value="true"><button class="btn btn-sm btn-success" type="submit">Trasladada</button></form><form method="post" action="/contabilidad/planillas/<%= planilla.id %>/traslado" onsubmit="return confirm('¿Confirmar que esta planilla no fue trasladada?');"><input type="hidden" name="_csrf" value="<%= csrfToken %>"><input type="hidden" name="trasladado" value="false"><button class="btn btn-sm btn-outline-danger" type="submit">No trasladada</button></form></div></td></tr><% }) %>
+        </tbody></table></div>
+      </section>
+    <% }) %>
 
-    <section class="card" aria-labelledby="received-table-title">
-      <div class="card-header bg-white border-0 px-4 pt-4 d-flex justify-content-between align-items-center gap-3"><h2 class="h5 mb-0" id="received-table-title">Listado de planillas</h2><span class="small text-muted"><%= total %> <%= total === 1 ? 'resultado' : 'resultados' %></span></div>
-      <div class="table-responsive"><table class="table table-hover mb-0"><caption class="visually-hidden">Planillas enviadas el <%= selectedDate %></caption><thead><tr><th>Codigo</th><th>Agencia</th><th>Acta</th><th>Fecha de envio</th><th>Registros</th><th>Aprobado</th><th>Cancelado</th><th>Descuentos</th><th>Monto cheque</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead><tbody>
-        <% if (planillas.length === 0) { %><tr><td class="text-center text-muted py-5" colspan="11"><i class="bi bi-inbox d-block fs-3 mb-2"></i>No hay planillas para la fecha y agencia seleccionadas.</td></tr><% } %>
-        <% planillas.forEach((planilla) => { %><tr><td class="fw-semibold"><%= planilla.codigo %></td><td><%= planilla.agenciaNombre %></td><td><%= planilla.numeroActa || 'Sin asignar' %></td><td class="text-nowrap"><%= dateTime.format(planilla.fechaEnvio) %></td><td><%= planilla.cantidadRegistros %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalAprobado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalCancelado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalDescuentos) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalMontoCheque) %></td><td><span class="status-badge status-<%= planilla.estado.toLowerCase() %>"><%= planilla.estado %></span></td><td class="text-end"><a class="btn btn-sm btn-outline-primary text-nowrap" href="/contabilidad/planillas/<%= planilla.id %>"><i class="bi bi-eye me-1"></i>Ver detalle</a></td></tr><% }) %>
-      </tbody></table></div>
-      <% if (totalPages > 1) { const agencyQuery = selectedAgencyId == null ? '' : `&agencia=${selectedAgencyId}`; %>
-        <div class="card-footer bg-white d-flex justify-content-between align-items-center"><span class="text-muted small"><%= total %> planillas · Pagina <%= page %> de <%= totalPages %></span><div class="btn-group" aria-label="Paginacion"><a class="btn btn-sm btn-outline-secondary <%= page === 1 ? 'disabled' : '' %>" href="?fecha=<%= selectedDate %><%= agencyQuery %>&page=<%= page - 1 %>" <%= page === 1 ? 'aria-disabled=true tabindex=-1' : '' %>>Anterior</a><a class="btn btn-sm btn-outline-secondary <%= page === totalPages ? 'disabled' : '' %>" href="?fecha=<%= selectedDate %><%= agencyQuery %>&page=<%= page + 1 %>" <%= page === totalPages ? 'aria-disabled=true tabindex=-1' : '' %>>Siguiente</a></div></div>
-      <% } %>
-    </section>
+    <% if (totalPages > 1) { const agencyQuery = selectedAgencyId == null ? '' : `&agencia=${selectedAgencyId}`; %>
+      <nav class="d-flex justify-content-between align-items-center" aria-label="Paginacion"><span class="text-muted small"><%= total %> planillas · Pagina <%= page %> de <%= totalPages %></span><div class="btn-group"><a class="btn btn-sm btn-outline-secondary <%= page === 1 ? 'disabled' : '' %>" href="?page=<%= page - 1 %><%= agencyQuery %>">Anterior</a><a class="btn btn-sm btn-outline-secondary <%= page === totalPages ? 'disabled' : '' %>" href="?page=<%= page + 1 %><%= agencyQuery %>">Siguiente</a></div></nav>
+    <% } %>
   </main>
 </div>
 <%- include('../partials/footer') %>

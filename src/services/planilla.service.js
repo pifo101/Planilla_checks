@@ -360,13 +360,26 @@ function requireAssistantAgency(user) {
 }
 
 function requireAccounting(user) {
-  if (user?.rol !== 'CONTABILIDAD') {
+  if (user?.rol !== 'CONTABILIDAD' || !Number.isSafeInteger(user.id) || user.id <= 0) {
     throw new PlanillaError(
       'ACCOUNTING_ROLE_REQUIRED',
-      'El usuario no tiene permiso para consultar las planillas recibidas.',
+      'El usuario no tiene permiso para operar planillas de Contabilidad.',
       403,
     );
   }
+}
+
+function normalizeTransferResult(value) {
+  if (value == null || value === '' || value === 'todas') return null;
+  if (value === 'trasladadas') return true;
+  if (value === 'no-trasladadas') return false;
+  throw new PlanillaError('INVALID_TRANSFER_RESULT', 'Selecciona un resultado de traslado valido.');
+}
+
+function normalizeTransferDecision(value) {
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  throw new PlanillaError('INVALID_TRANSFER_DECISION', 'La decision de traslado debe ser true o false.');
 }
 
 function normalizeAccountingAgency(value) {
@@ -455,7 +468,6 @@ async function getSentPlanillaDetail(user, rawId) {
 
 async function listAccountingPlanillas(user, filters = {}, options = {}) {
   requireAccounting(user);
-  const date = normalizeHistoryDate(filters.fecha, options.now ? options.now() : new Date());
   const page = normalizePage(filters.page);
   const agenciaId = normalizeAccountingAgency(filters.agencia);
   const agencies = (await agencyRepository.findAvailableForAccounting()).map((agency) => ({
@@ -466,10 +478,76 @@ async function listAccountingPlanillas(user, filters = {}, options = {}) {
   if (agenciaId != null && !agencies.some((agency) => agency.id === agenciaId)) {
     throw new PlanillaError('INVALID_AGENCY', 'Selecciona una agencia valida.');
   }
-  const result = await planillaRepository.findForAccounting(
+  const result = await planillaRepository.findPendingForAccounting(agenciaId, page, HISTORY_PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(result.total / HISTORY_PAGE_SIZE));
+  if (page > totalPages) {
+    throw new PlanillaError('INVALID_HISTORY_PAGE', 'La pagina solicitada no es valida.');
+  }
+  return {
+    ...result,
+    agencies,
+    selectedAgencyId: agenciaId,
+    page,
+    pageSize: HISTORY_PAGE_SIZE,
+    totalPages,
+  };
+}
+
+async function decideAccountingTransfer(user, rawId, body, options = {}) {
+  requireAccounting(user);
+  const id = normalizePlanillaId(rawId);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new PlanillaError('INVALID_TRANSFER_DECISION', 'La decision de traslado es obligatoria.');
+  }
+  const trasladado = normalizeTransferDecision(body.trasladado);
+  let fechaDecision;
+  try {
+    fechaDecision = toSecondPrecision(options.now ? options.now() : new Date());
+  } catch {
+    throw new PlanillaError('TRANSFER_DECISION_FAILED', 'No fue posible generar la fecha de decision.', 500);
+  }
+
+  let result;
+  try {
+    result = await planillaRepository.decideAccountingTransfer(id, trasladado, user.id, fechaDecision);
+  } catch (error) {
+    throw new PlanillaError(
+      'TRANSFER_DECISION_FAILED',
+      'No fue posible guardar la decision de traslado.',
+      500,
+      { cause: error },
+    );
+  }
+  if (result.decision) return { ...result.decision, trasladado: Boolean(result.decision.trasladado) };
+  if (!result.current) {
+    throw new PlanillaError('PLANILLA_NOT_FOUND', 'La planilla solicitada no existe.', 404);
+  }
+  throw new PlanillaError(
+    'TRANSFER_DECISION_ALREADY_MADE',
+    'La planilla ya tiene una decision de traslado y no puede modificarse.',
+    409,
+  );
+}
+
+async function listAccountingTransferHistory(user, filters = {}, options = {}) {
+  requireAccounting(user);
+  const date = normalizeHistoryDate(filters.fecha, options.now ? options.now() : new Date());
+  const page = normalizePage(filters.page);
+  const agenciaId = normalizeAccountingAgency(filters.agencia);
+  const trasladado = normalizeTransferResult(filters.resultado);
+  const agencies = (await agencyRepository.findAvailableForAccounting()).map((agency) => ({
+    ...agency,
+    id: Number(agency.id),
+    activo: Boolean(agency.activo),
+  }));
+  if (agenciaId != null && !agencies.some((agency) => agency.id === agenciaId)) {
+    throw new PlanillaError('INVALID_AGENCY', 'Selecciona una agencia valida.');
+  }
+  const result = await planillaRepository.findAccountingTransferHistory(
     date.startDate,
     date.endDate,
     agenciaId,
+    trasladado,
     page,
     HISTORY_PAGE_SIZE,
   );
@@ -482,6 +560,7 @@ async function listAccountingPlanillas(user, filters = {}, options = {}) {
     agencies,
     selectedDate: date.selectedDate,
     selectedAgencyId: agenciaId,
+    selectedResult: filters.resultado || 'todas',
     page,
     pageSize: HISTORY_PAGE_SIZE,
     totalPages,
@@ -499,14 +578,18 @@ module.exports = {
   MAX_SOLICITUDES,
   PlanillaError,
   createPlanilla,
+  decideAccountingTransfer,
   generatePlanillaCode,
   getAccountingPlanillaDetail,
   getSentPlanillaDetail,
   listAccountingPlanillas,
+  listAccountingTransferHistory,
   listSentPlanillas,
   normalizeAccountingAgency,
   normalizeHistoryDate,
   normalizePage,
   normalizePlanillaId,
+  normalizeTransferDecision,
+  normalizeTransferResult,
   validateSubmission,
 };

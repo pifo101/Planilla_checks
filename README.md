@@ -58,6 +58,7 @@ sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\003_create_indexes.sq
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\004_group_members.sql" -b
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\005_daily_actas.sql" -b
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\006_user_role_agency_constraint.sql" -b
+sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\007_accounting_transfer_decision.sql" -b
 ```
 
 Para preparar el entorno local, define las variables `DEV_ADMIN_*`, `DEV_ASSISTANT_*`, `DEV_ACCOUNTING_*` y `DEV_ASSISTANT_AGENCY_CODE` documentadas en `.env.example`, usando contrasenas locales de al menos 12 caracteres. Luego ejecuta:
@@ -68,7 +69,7 @@ npm run seed:dev
 
 El seed solo acepta `PlanillaChecksDB` en SQL Server Express local y se bloquea en produccion y en la base de integracion. Dentro de una transaccion crea o actualiza las diez agencias operativas (`001`, `002`, `004` a `011`) y restaura las cuentas locales `ADMIN`, `ASISTENTE` y `CONTABILIDAD`. Es idempotente, no imprime credenciales ni hashes y no elimina agencias adicionales: las conserva y reporta sus codigos para evitar afectar referencias existentes.
 
-`001_create_database.sql` es un bootstrap opcional que crea unicamente `PlanillaChecksDB`. Para otro `DB_DATABASE`, la base debe existir previamente y los scripts `002` a `005` deben ejecutarse con `-d` apuntando explicitamente a ella.
+`001_create_database.sql` es un bootstrap opcional que crea unicamente `PlanillaChecksDB`. Para otro `DB_DATABASE`, la base debe existir previamente y los scripts `002` a `007` deben ejecutarse con `-d` apuntando explicitamente a ella.
 
 ## Crear el primer administrador
 
@@ -94,15 +95,15 @@ npm start
 
 La aplicacion queda en `http://localhost:3000`. Para recarga automatica usar `npm run dev`.
 
-La verificacion integral requiere una base separada existente indicada por `TEST_DB_DATABASE`, cuyo nombre debe terminar en `TestDB` y ser distinto de `DB_DATABASE`. El script cambia a esa base antes de cargar la aplicacion y comprueba `DB_NAME()` antes de crear fixtures. Si la base no existe o no cumple esas condiciones, falla sin operar sobre la base de desarrollo.
+La verificacion integral requiere la base separada existente `PlanillaChecksTestDB`, indicada por `TEST_DB_DATABASE` y distinta de `DB_DATABASE`. El script exige ese nombre exacto, cambia a esa base antes de cargar la aplicacion y comprueba `DB_NAME()` antes de crear fixtures.
 
-La base de pruebas no se crea ni se elimina automaticamente. Un operador debe crearla explicitamente y aplicar `002` a `006` con `sqlcmd -d` antes de ejecutar:
+La base de pruebas no se crea ni se elimina automaticamente. Un operador debe crearla explicitamente y aplicar `002` a `007` con `sqlcmd -d` antes de ejecutar:
 
 ```powershell
 npm test
 ```
 
-La integracion crea datos temporales en la base de pruebas, valida la administracion HTTP de usuarios, repositorios, sesiones, roles, restricciones y la consulta read-only de Contabilidad sobre varias agencias, y elimina exclusivamente sus fixtures al finalizar.
+La integracion crea datos temporales en la base de pruebas, valida administracion, sesiones, roles, bandeja multiagencia, ambas decisiones de traslado, auditoria, inmutabilidad, historial y solicitudes intactas, y elimina exclusivamente sus fixtures al finalizar.
 
 ## Arquitectura de persistencia
 
@@ -124,7 +125,9 @@ Cada fecha operativa de `America/Guatemala` tiene una sola acta global, comparti
 
 `GET /asistente/planillas` y `GET /asistente/planillas/:id` consultan el historial real de SQL Server en modo de solo lectura. La agencia siempre procede de la sesion revalidada, el listado filtra por el dia calendario de Guatemala de `fecha_envio`, pagina 20 planillas por consulta y muestra el snapshot del acta; el detalle conserva una fila por cada solicitud o miembro grupal.
 
-`GET /contabilidad/planillas` y `GET /contabilidad/planillas/:id` tambien consultan SQL Server y requieren exclusivamente el rol `CONTABILIDAD`. El listado muestra todas las agencias o una agencia seleccionada, usa por defecto la fecha operativa actual de `America/Guatemala`, pagina 20 planillas y calcula en SQL los totales del conjunto filtrado. Incluye agencias inactivas cuando tienen historial. El detalle usa el snapshot `planillas.numero_acta` y muestra cada miembro grupal persistido de forma independiente. Ambos GET son de solo lectura: abrir una planilla no la marca como recibida o procesada.
+`GET /contabilidad/planillas` muestra las planillas con `trasladado IS NULL`, sin filtro diario; una pendiente antigua permanece hasta que Contabilidad decide. La bandeja se organiza por agencia de origen y `POST /contabilidad/planillas/:id/traslado` decide la planilla completa. El servidor fija usuario y fecha. `trasladado = 1` significa trasladada y `trasladado = 0`, no trasladada; ninguna opcion aprueba o rechaza creditos, procesa solicitudes ni ejecuta desembolsos.
+
+`GET /contabilidad/historial` contiene solo decisiones tomadas y filtra por `fecha_decision_traslado` interpretada con `America/Guatemala`, agencia y resultado. Conserva visible `fecha_envio`, acta, miembros, totales y usuario decisor. `GET /contabilidad/planillas/:id` sigue siendo read-only. Una decision es inmutable en la interfaz normal; su correccion esta pendiente de definicion funcional.
 
 El contrato, campos, calculos conocidos, errores y reglas pendientes del Web Service estan en [`docs/webservice.md`](docs/webservice.md). El modelo SQL se describe en [`docs/database.md`](docs/database.md) y las reglas funcionales en [`docs/business-rules.md`](docs/business-rules.md).
 
@@ -133,5 +136,5 @@ El contrato, campos, calculos conocidos, errores y reglas pendientes del Web Ser
 - El Web Service institucional disponible usa HTTP dentro de la red interna; su transporte depende del proveedor.
 - El cifrado y los certificados de SQL Server deben definirse segun la infraestructura del despliegue. La configuracion actual corresponde a SQL Server Express local.
 - El rate limiting de login es recomendable antes del despliegue definitivo, pero no forma parte de esta etapa interna.
-- Los formularios HTML existentes no tienen proteccion CSRF dedicada; `SameSite=Lax` no sustituye un token CSRF y debe abordarse antes de exponer la aplicacion fuera del entorno controlado.
-- Los scripts `002` a `006` requieren que el operador o runner seleccione explicitamente la base destino con `sqlcmd -d`.
+- La decision de traslado, por ser inmutable, exige un token CSRF ligado a la sesion. Los demas formularios HTML existentes aun deben incorporarse a esta proteccion antes de exponer la aplicacion fuera del entorno controlado.
+- Los scripts `002` a `007` requieren que el operador o runner seleccione explicitamente la base destino con `sqlcmd -d`.

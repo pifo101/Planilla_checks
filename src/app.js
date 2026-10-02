@@ -70,13 +70,11 @@ app.use((req, res) => {
 });
 
 app.use((error, req, res, next) => {
-  console.error(error);
-
   if (res.headersSent) {
     return next(error);
   }
 
-  if (req.originalUrl.startsWith('/api/')) {
+  if (req.originalUrl.startsWith('/api/') || req.is('application/json')) {
     if (error.type === 'entity.parse.failed') {
       return res.status(400).json({
         success: false,
@@ -89,12 +87,14 @@ app.use((error, req, res, next) => {
         error: { code: 'REQUEST_TOO_LARGE', message: 'El cuerpo de la peticion excede el limite permitido.' },
       });
     }
+    console.error(error);
     return res.status(500).json({
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Error interno del servidor.' },
     });
   }
 
+  console.error(error);
   return res.status(500).render('500', {
     pageTitle: 'Error del servidor',
     errorMessage: config.isProduction ? null : error.message,

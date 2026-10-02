@@ -62,6 +62,9 @@ BEGIN
         fecha_envio DATETIME2(0) NULL,
         estado VARCHAR(20) NOT NULL CONSTRAINT DF_planillas_estado DEFAULT ('BORRADOR'),
         numero_acta NVARCHAR(50) NULL,
+        trasladado BIT NULL,
+        fecha_decision_traslado DATETIME2(0) NULL,
+        decision_traslado_usuario_id INT NULL,
         created_at DATETIME2(0) NOT NULL CONSTRAINT DF_planillas_created_at DEFAULT (SYSUTCDATETIME()),
         updated_at DATETIME2(0) NOT NULL CONSTRAINT DF_planillas_updated_at DEFAULT (SYSUTCDATETIME()),
         CONSTRAINT UQ_planillas_codigo UNIQUE (codigo),
@@ -70,8 +73,13 @@ BEGIN
             (estado = 'BORRADOR' AND fecha_envio IS NULL)
             OR (estado <> 'BORRADOR' AND fecha_envio IS NOT NULL)
         ),
+        CONSTRAINT CK_planillas_decision_traslado CHECK (
+            (trasladado IS NULL AND fecha_decision_traslado IS NULL AND decision_traslado_usuario_id IS NULL)
+            OR (trasladado IS NOT NULL AND fecha_decision_traslado IS NOT NULL AND decision_traslado_usuario_id IS NOT NULL)
+        ),
         CONSTRAINT FK_planillas_agencias FOREIGN KEY (agencia_id) REFERENCES dbo.agencias (id),
-        CONSTRAINT FK_planillas_usuarios FOREIGN KEY (creada_por_usuario_id) REFERENCES dbo.usuarios (id)
+        CONSTRAINT FK_planillas_usuarios FOREIGN KEY (creada_por_usuario_id) REFERENCES dbo.usuarios (id),
+        CONSTRAINT FK_planillas_decision_traslado_usuario FOREIGN KEY (decision_traslado_usuario_id) REFERENCES dbo.usuarios (id)
     );
 END;
 GO
