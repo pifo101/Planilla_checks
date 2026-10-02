@@ -1,11 +1,9 @@
 const express = require('express');
 const { showLogin, login, logout } = require('../controllers/auth.controller');
-const { showNewUser } = require('../controllers/admin.controller');
 
 const router = express.Router();
 
 router.get('/login', showLogin);
-router.get('/crear-cuenta', showNewUser);
 router.post('/login', login);
 router.post('/logout', logout);
 

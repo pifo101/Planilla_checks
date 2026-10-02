@@ -6,7 +6,8 @@ async function authenticate(email, password) {
 
   const invalidAgency = user?.agenciaId != null && !user.agenciaActivo;
   const missingAssistantAgency = user?.rol === 'ASISTENTE' && user.agenciaId == null;
-  if (!user || !user.activo || invalidAgency || missingAssistantAgency) {
+  const unexpectedAgency = user?.rol !== 'ASISTENTE' && user?.agenciaId != null;
+  if (!user || !user.activo || invalidAgency || missingAssistantAgency || unexpectedAgency) {
     return null;
   }
 

@@ -27,6 +27,10 @@ BEGIN
         CONSTRAINT UQ_usuarios_email UNIQUE (email),
         CONSTRAINT CK_usuarios_rol CHECK (rol IN ('ADMIN', 'ASISTENTE', 'CONTABILIDAD')),
         CONSTRAINT CK_usuarios_asistente_agencia CHECK (rol <> 'ASISTENTE' OR agencia_id IS NOT NULL),
+        CONSTRAINT CK_usuarios_rol_agencia CHECK (
+            (rol = 'ASISTENTE' AND agencia_id IS NOT NULL)
+            OR (rol IN ('ADMIN', 'CONTABILIDAD') AND agencia_id IS NULL)
+        ),
         CONSTRAINT FK_usuarios_agencias FOREIGN KEY (agencia_id) REFERENCES dbo.agencias (id)
     );
 END;

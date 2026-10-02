@@ -1,20 +1,6 @@
-// DEMO / MOCK: these records are view data only and are not persisted.
-const users = [
-  { name: 'Ana Morales', email: 'ana@example.test', role: 'ADMIN', agency: 'Oficina central', status: 'ACTIVO', lastAccess: 'Hoy, 08:45' },
-  { name: 'Juan Perez', email: 'juan@example.test', role: 'ASISTENTE', agency: 'Solola', status: 'ACTIVO', lastAccess: 'Hoy, 08:30' },
-  { name: 'Andrea Lopez', email: 'andrea@example.test', role: 'ASISTENTE', agency: 'Panajachel', status: 'ACTIVO', lastAccess: 'Ayer, 16:12' },
-  { name: 'Maria Perez', email: 'maria@example.test', role: 'CONTABILIDAD', agency: 'Oficina central', status: 'ACTIVO', lastAccess: 'Hoy, 09:02' },
-  { name: 'Carlos Lopez', email: 'carlos@example.test', role: 'ASISTENTE', agency: 'Solola', status: 'INACTIVO', lastAccess: '20/09/2026' },
-  { name: 'Luisa Gomez', email: 'luisa@example.test', role: 'CONTABILIDAD', agency: 'Oficina central', status: 'ACTIVO', lastAccess: 'Ayer, 15:50' },
-  { name: 'Pedro Mendez', email: 'pedro@example.test', role: 'ASISTENTE', agency: 'Santiago Atitlan', status: 'ACTIVO', lastAccess: '26/09/2026' },
-];
-
-const agencies = [
-  { code: 'SOL', name: 'Solola', users: 3, status: 'ACTIVA' },
-  { code: 'PAN', name: 'Panajachel', users: 2, status: 'ACTIVA' },
-  { code: 'SAT', name: 'Santiago Atitlan', users: 1, status: 'ACTIVA' },
-  { code: 'SCL', name: 'San Lucas Toliman', users: 0, status: 'INACTIVA' },
-];
+const adminService = require('../services/admin.service');
+const agencyRepository = require('../repositories/agency.repository');
+const userRepository = require('../repositories/user.repository');
 
 const roleLabels = {
   ADMIN: 'Administrador',
@@ -22,42 +8,121 @@ const roleLabels = {
   CONTABILIDAD: 'Contabilidad',
 };
 
-function listUsers(req, res) {
-  res.render('admin/users', {
+async function usersViewData(req, extra = {}) {
+  const [users, agencies] = await Promise.all([
+    userRepository.findAll(),
+    agencyRepository.findActive(),
+  ]);
+  const agencyFilters = [...new Set(users.map((user) => user.agenciaNombre).filter(Boolean))].sort();
+
+  return {
     pageTitle: 'Administracion de usuarios',
     users,
-    agencies: agencies.filter((agency) => agency.status === 'ACTIVA'),
+    agencies,
+    agencyFilters,
+    roles: adminService.ROLES,
     roleLabels,
+    message: req.query.created
+      ? 'Usuario creado correctamente.'
+      : req.query.updated ? 'Usuario actualizado correctamente.' : null,
     summary: {
       total: users.length,
-      active: users.filter((user) => user.status === 'ACTIVO').length,
-      inactive: users.filter((user) => user.status === 'INACTIVO').length,
-      assistants: users.filter((user) => user.role === 'ASISTENTE').length,
+      active: users.filter((user) => user.activo).length,
+      blocked: users.filter((user) => !user.activo).length,
+      assistants: users.filter((user) => user.rol === 'ASISTENTE').length,
     },
-  });
+    ...extra,
+  };
 }
 
-function showNewUser(req, res) {
-  res.render('admin/new-user', {
-    pageTitle: 'Crear cuenta',
-    agencies: agencies.filter((agency) => agency.status === 'ACTIVA'),
-  });
+async function listUsers(req, res, next) {
+  try {
+    return res.render('admin/users', await usersViewData(req));
+  } catch (error) {
+    return next(error);
+  }
 }
 
-function listAgencies(req, res) {
-  res.render('admin/agencies', {
-    pageTitle: 'Agencias',
-    agencies,
-    summary: {
-      total: agencies.length,
-      active: agencies.filter((agency) => agency.status === 'ACTIVA').length,
-      associatedUsers: agencies.reduce((sum, agency) => sum + agency.users, 0),
-    },
-  });
+async function showNewUser(req, res, next) {
+  try {
+    return res.render('admin/new-user', {
+      pageTitle: 'Crear usuario',
+      agencies: await agencyRepository.findActive(),
+      roles: adminService.ROLES,
+      roleLabels,
+      values: {},
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function createUser(req, res, next) {
+  const values = {
+    nombre: String(req.body.nombre || '').trim(),
+    email: String(req.body.email || '').trim().toLowerCase(),
+    rol: String(req.body.rol || '').trim().toUpperCase(),
+    agenciaId: String(req.body.agenciaId || '').trim(),
+  };
+
+  try {
+    await adminService.createUser(req.body, req.session.user);
+    return res.redirect('/admin/usuarios?created=1');
+  } catch (error) {
+    if (!(error instanceof adminService.AdminError)) return next(error);
+    try {
+      return res.status(error.status).render('admin/new-user', {
+        pageTitle: 'Crear usuario',
+        agencies: await agencyRepository.findActive(),
+        roles: adminService.ROLES,
+        roleLabels,
+        values,
+        error: error.message,
+      });
+    } catch (renderError) {
+      return next(renderError);
+    }
+  }
+}
+
+async function updateUser(req, res, next) {
+  try {
+    await adminService.updateUser(req.params.id, req.body, req.session.user);
+    return res.redirect('/admin/usuarios?updated=1');
+  } catch (error) {
+    if (!(error instanceof adminService.AdminError)) return next(error);
+    try {
+      return res.status(error.status).render('admin/users', await usersViewData(req, {
+        error: error.message,
+      }));
+    } catch (renderError) {
+      return next(renderError);
+    }
+  }
+}
+
+async function listAgencies(req, res, next) {
+  try {
+    const agencies = await agencyRepository.findAll();
+    return res.render('admin/agencies', {
+      pageTitle: 'Agencias',
+      agencies,
+      summary: {
+        total: agencies.length,
+        active: agencies.filter((agency) => agency.activo).length,
+        associatedUsers: agencies.reduce((sum, agency) => sum + Number(agency.usuarios), 0),
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
 }
 
 module.exports = {
+  createUser,
   listAgencies,
   listUsers,
   showNewUser,
+  updateUser,
+  usersViewData,
 };

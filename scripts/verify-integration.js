@@ -27,6 +27,9 @@ const alternateEmail = `alternate-${suffix}@example.test`;
 const inactiveEmail = `inactive-${suffix}@example.test`;
 const accountingEmail = `accounting-${suffix}@example.test`;
 const deletedEmail = `deleted-${suffix}@example.test`;
+const adminEmail = `admin-${suffix}@adicla.org.gt`;
+const managedAssistantEmail = `managed-assistant-${suffix}@adicla.org.gt`;
+const managedAccountingEmail = `managed-accounting-${suffix}@adicla.org.gt`;
 const password = crypto.randomBytes(18).toString('base64url');
 let server;
 let fixturesCreated = false;
@@ -53,6 +56,15 @@ async function login(baseUrl, email, loginPassword) {
   });
 }
 
+async function postForm(url, cookie, values) {
+  return fetch(url, {
+    method: 'POST',
+    redirect: 'manual',
+    headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(values),
+  });
+}
+
 async function cleanup() {
   const pool = await getPool();
   await pool.request()
@@ -63,6 +75,9 @@ async function cleanup() {
     .input('inactiveEmail', sql.NVarChar(254), inactiveEmail)
     .input('accountingEmail', sql.NVarChar(254), accountingEmail)
     .input('deletedEmail', sql.NVarChar(254), deletedEmail)
+    .input('adminEmail', sql.NVarChar(254), adminEmail)
+    .input('managedAssistantEmail', sql.NVarChar(254), managedAssistantEmail)
+    .input('managedAccountingEmail', sql.NVarChar(254), managedAccountingEmail)
     .query(`
       UPDATE p
       SET estado = 'BORRADOR', fecha_envio = NULL
@@ -84,9 +99,11 @@ async function cleanup() {
       DELETE ad
       FROM dbo.actas_diarias AS ad
       INNER JOIN dbo.usuarios AS u ON u.id = ad.creada_por_usuario_id
-      WHERE u.email IN (@activeEmail, @alternateEmail, @inactiveEmail, @accountingEmail, @deletedEmail);
+      WHERE u.email IN (@activeEmail, @alternateEmail, @inactiveEmail, @accountingEmail, @deletedEmail,
+                        @adminEmail, @managedAssistantEmail, @managedAccountingEmail);
 
-      DELETE FROM dbo.usuarios WHERE email IN (@activeEmail, @alternateEmail, @inactiveEmail, @accountingEmail, @deletedEmail);
+      DELETE FROM dbo.usuarios WHERE email IN (@activeEmail, @alternateEmail, @inactiveEmail, @accountingEmail, @deletedEmail,
+                                               @adminEmail, @managedAssistantEmail, @managedAccountingEmail);
       DELETE FROM dbo.agencias WHERE codigo IN (@agencyCode, @alternateAgencyCode);
     `);
 }
@@ -158,6 +175,13 @@ async function main() {
     email: deletedEmail,
     passwordHash,
     rol: 'CONTABILIDAD',
+  });
+  const adminPasswordHash = await bcrypt.hash(password, 12);
+  const adminUser = await userRepository.create({
+    nombre: 'Administrador temporal',
+    email: adminEmail,
+    passwordHash: adminPasswordHash,
+    rol: 'ADMIN',
   });
 
   assert.equal((await userRepository.findByEmail(activeEmail)).id, activeUser.id);
@@ -468,6 +492,8 @@ async function main() {
 
   const port = await startServer();
   const baseUrl = `http://127.0.0.1:${port}`;
+  const publicRegistration = await fetch(`${baseUrl}/crear-cuenta`, { redirect: 'manual' });
+  assert.equal(publicRegistration.status, 404);
   const withoutSession = await fetch(`${baseUrl}/dashboard`, { redirect: 'manual' });
   assert.equal(withoutSession.status, 302);
   assert.equal(withoutSession.headers.get('location'), '/login');
@@ -484,6 +510,94 @@ async function main() {
     body: JSON.stringify({ solicitudes: [] }),
   });
   assert.equal(submitWithoutSession.status, 401);
+
+  const adminLogin = await login(baseUrl, adminEmail, password);
+  assert.equal(adminLogin.status, 302);
+  const adminCookie = adminLogin.headers.get('set-cookie').split(';', 1)[0];
+  const adminUsersPage = await fetch(`${baseUrl}/admin/usuarios`, { headers: { cookie: adminCookie } });
+  assert.equal(adminUsersPage.status, 200);
+  const adminUsersHtml = await adminUsersPage.text();
+  assert.match(adminUsersHtml, new RegExp(adminEmail));
+  assert.doesNotMatch(adminUsersHtml, /Datos de demostracion|password_hash/i);
+
+  const createManagedAssistant = await postForm(`${baseUrl}/admin/usuarios`, adminCookie, {
+    nombre: 'Asistente administrado',
+    email: managedAssistantEmail.toUpperCase(),
+    password,
+    confirmPassword: password,
+    rol: 'ASISTENTE',
+    agenciaId: String(agenciaId),
+  });
+  assert.equal(createManagedAssistant.status, 302);
+  const managedAssistantResult = await pool.request()
+    .input('email', sql.NVarChar(254), managedAssistantEmail)
+    .query('SELECT id, password_hash AS passwordHash, rol, agencia_id AS agenciaId, activo FROM dbo.usuarios WHERE email = @email;');
+  const managedAssistant = managedAssistantResult.recordset[0];
+  assert.ok(managedAssistant);
+  assert.equal(managedAssistant.rol, 'ASISTENTE');
+  assert.equal(Number(managedAssistant.agenciaId), agenciaId);
+  assert.equal(bcrypt.getRounds(managedAssistant.passwordHash), 12);
+  assert.equal(await bcrypt.compare(password, managedAssistant.passwordHash), true);
+
+  const managedAssistantLogin = await login(baseUrl, managedAssistantEmail, password);
+  assert.equal(managedAssistantLogin.status, 302);
+  const managedAssistantCookie = managedAssistantLogin.headers.get('set-cookie').split(';', 1)[0];
+  assert.equal((await postForm(`${baseUrl}/admin/usuarios`, managedAssistantCookie, {
+    nombre: 'No autorizado', email: `forbidden-${suffix}@adicla.org.gt`, password,
+    confirmPassword: password, rol: 'ADMIN', agenciaId: '',
+  })).status, 403);
+
+  assert.equal((await postForm(`${baseUrl}/admin/usuarios/${managedAssistant.id}`, adminCookie, {
+    rol: 'ASISTENTE', agenciaId: String(agenciaId), activo: 'false',
+  })).status, 302);
+  assert.equal((await fetch(`${baseUrl}/asistente/nueva-planilla`, {
+    headers: { cookie: managedAssistantCookie }, redirect: 'manual',
+  })).status, 302);
+  assert.equal((await postForm(`${baseUrl}/admin/usuarios/${managedAssistant.id}`, adminCookie, {
+    rol: 'ASISTENTE', agenciaId: String(agenciaId), activo: 'true',
+  })).status, 302);
+
+  const reactivatedLogin = await login(baseUrl, managedAssistantEmail, password);
+  const reactivatedCookie = reactivatedLogin.headers.get('set-cookie').split(';', 1)[0];
+  assert.equal((await postForm(`${baseUrl}/admin/usuarios/${managedAssistant.id}`, adminCookie, {
+    rol: 'ASISTENTE', agenciaId: String(alternateAgencyId), activo: 'true',
+  })).status, 302);
+  const revalidatedAgencyResponse = await fetch(`${baseUrl}/asistente/nueva-planilla`, {
+    headers: { cookie: reactivatedCookie },
+  });
+  assert.equal(revalidatedAgencyResponse.status, 200);
+  assert.match(await revalidatedAgencyResponse.text(), new RegExp(`Agencia alterna ${suffix}`));
+
+  assert.equal((await postForm(`${baseUrl}/admin/usuarios`, adminCookie, {
+    nombre: 'Contabilidad administrada', email: managedAccountingEmail, password,
+    confirmPassword: password, rol: 'CONTABILIDAD', agenciaId: String(agenciaId),
+  })).status, 302);
+  const managedAccountingResult = await pool.request()
+    .input('email', sql.NVarChar(254), managedAccountingEmail)
+    .query('SELECT id, agencia_id AS agenciaId FROM dbo.usuarios WHERE email = @email;');
+  assert.equal(managedAccountingResult.recordset[0].agenciaId, null);
+  const managedAccountingLogin = await login(baseUrl, managedAccountingEmail, password);
+  const managedAccountingCookie = managedAccountingLogin.headers.get('set-cookie').split(';', 1)[0];
+  assert.equal((await postForm(`${baseUrl}/admin/usuarios/${managedAssistant.id}`, managedAccountingCookie, {
+    rol: 'ASISTENTE', agenciaId: String(agenciaId), activo: 'true',
+  })).status, 403);
+
+  for (const invalidUser of [
+    { email: managedAssistantEmail, password, confirmPassword: password },
+    { email: `external-${suffix}@example.test`, password, confirmPassword: password },
+    { email: `short-${suffix}@adicla.org.gt`, password: 'corta', confirmPassword: 'corta' },
+  ]) {
+    const response = await postForm(`${baseUrl}/admin/usuarios`, adminCookie, {
+      nombre: 'Usuario invalido', rol: 'ADMIN', agenciaId: '', ...invalidUser,
+    });
+    assert.equal(response.status, 400);
+  }
+  assert.equal((await postForm(`${baseUrl}/admin/usuarios/${adminUser.id}`, adminCookie, {
+    rol: 'CONTABILIDAD', agenciaId: '', activo: 'true',
+  })).status, 400);
+  assert.equal((await postForm(`${baseUrl}/admin/usuarios/${adminUser.id}`, adminCookie, {
+    rol: 'ADMIN', agenciaId: '', activo: 'false',
+  })).status, 400);
 
   assert.equal((await login(baseUrl, activeEmail, `${password}-incorrecta`)).status, 401);
   assert.equal((await login(baseUrl, inactiveEmail, password)).status, 401);
@@ -581,7 +695,7 @@ async function main() {
 
   await pool.request()
     .input('userId', sql.Int, serviceUser.id)
-    .query("UPDATE dbo.usuarios SET rol = 'CONTABILIDAD' WHERE id = @userId;");
+    .query("UPDATE dbo.usuarios SET rol = 'CONTABILIDAD', agencia_id = NULL WHERE id = @userId;");
   assert.equal((await fetch(`${baseUrl}/asistente/planillas`, { headers: { cookie } })).status, 403);
   assert.equal((await fetch(`${baseUrl}/contabilidad/planillas`, { headers: { cookie } })).status, 200);
 

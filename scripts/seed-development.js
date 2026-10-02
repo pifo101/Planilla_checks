@@ -55,8 +55,8 @@ function readDevelopmentUsers(environment) {
       throw new Error(`Define ${variable('NAME')}, ${variable('EMAIL')} y ${variable('PASSWORD')} en el entorno.`);
     }
     if (nombre.length > 150) throw new Error(`${variable('NAME')} no puede exceder 150 caracteres.`);
-    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      throw new Error(`${variable('EMAIL')} debe ser un correo valido.`);
+    if (email.length > 254 || !/^[^\s@]+@adicla\.org\.gt$/i.test(email)) {
+      throw new Error(`${variable('EMAIL')} debe ser un correo institucional @adicla.org.gt valido.`);
     }
     if (password.length < 12) {
       throw new Error(`${variable('PASSWORD')} debe tener al menos 12 caracteres.`);

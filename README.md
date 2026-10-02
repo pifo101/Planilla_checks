@@ -57,6 +57,7 @@ sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\002_create_tables.sql
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\003_create_indexes.sql" -b
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\004_group_members.sql" -b
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\005_daily_actas.sql" -b
+sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\006_user_role_agency_constraint.sql" -b
 ```
 
 Para preparar el entorno local, define las variables `DEV_ADMIN_*`, `DEV_ASSISTANT_*`, `DEV_ACCOUNTING_*` y `DEV_ASSISTANT_AGENCY_CODE` documentadas en `.env.example`, usando contrasenas locales de al menos 12 caracteres. Luego ejecuta:
@@ -75,13 +76,15 @@ Definir las variables solo en el entorno del proceso y ejecutar el script. La co
 
 ```powershell
 $env:ADMIN_NAME="Nombre del administrador"
-$env:ADMIN_EMAIL="admin@institucion.example"
+$env:ADMIN_EMAIL="admin@adicla.org.gt"
 $env:ADMIN_PASSWORD="una-contrasena-segura"
 npm run create-admin
 Remove-Item Env:ADMIN_PASSWORD
 ```
 
-El script genera un hash bcrypt con 12 rounds. Los roles `ADMIN` y `CONTABILIDAD` pueden no tener agencia; `ASISTENTE` siempre requiere una agencia valida.
+El script genera un hash bcrypt con 12 rounds y exige correo `@adicla.org.gt`. Es un bootstrap operativo para el primer administrador; una vez disponible ese acceso, solo un `ADMIN` autenticado crea usuarios desde `/admin/usuarios/nuevo`.
+
+La administracion utiliza SQL Server real. Un `ADMIN` puede listar usuarios, crear cuentas, cambiar rol/agencia y bloquear o reactivar accesos. `ADMIN` y `CONTABILIDAD` siempre quedan con `agencia_id = NULL`; `ASISTENTE` requiere una agencia activa. No existe auto-registro publico y `/crear-cuenta` responde 404.
 
 ## Iniciar y probar
 
@@ -93,13 +96,13 @@ La aplicacion queda en `http://localhost:3000`. Para recarga automatica usar `np
 
 La verificacion integral requiere una base separada existente indicada por `TEST_DB_DATABASE`, cuyo nombre debe terminar en `TestDB` y ser distinto de `DB_DATABASE`. El script cambia a esa base antes de cargar la aplicacion y comprueba `DB_NAME()` antes de crear fixtures. Si la base no existe o no cumple esas condiciones, falla sin operar sobre la base de desarrollo.
 
-La base de pruebas no se crea ni se elimina automaticamente. Un operador debe crearla explicitamente y aplicar `002`, `003`, `004` y `005` con `sqlcmd -d` antes de ejecutar:
+La base de pruebas no se crea ni se elimina automaticamente. Un operador debe crearla explicitamente y aplicar `002` a `006` con `sqlcmd -d` antes de ejecutar:
 
 ```powershell
 npm test
 ```
 
-La integracion crea datos temporales en la base de pruebas, valida repositorios, sesiones, roles, restricciones y la consulta read-only de Contabilidad sobre varias agencias, y elimina sus fixtures al finalizar.
+La integracion crea datos temporales en la base de pruebas, valida la administracion HTTP de usuarios, repositorios, sesiones, roles, restricciones y la consulta read-only de Contabilidad sobre varias agencias, y elimina exclusivamente sus fixtures al finalizar.
 
 ## Arquitectura de persistencia
 
@@ -112,6 +115,8 @@ La integracion crea datos temporales en la base de pruebas, valida repositorios,
 - `scripts/create-admin.js`: alta segura del primer administrador.
 
 El login provisional fue reemplazado por consulta a SQL Server y `bcrypt.compare`. La sesion solo guarda `id`, `nombre`, `email`, `rol`, `agenciaId` y el nombre de agencia para presentacion; nunca guarda contrasenas ni hashes. Cada peticion protegida vuelve a consultar el usuario por ID para aplicar inmediatamente desactivaciones y cambios de rol o agencia.
+
+`admin.service.js` exige correo institucional `@adicla.org.gt`, nombre de hasta 150 caracteres, contrasena nueva de al menos 12 caracteres y confirmacion coincidente. Genera bcrypt con 12 rounds, normaliza el correo a minusculas y traduce conflictos UNIQUE de correo a un mensaje controlado. El administrador autenticado no puede bloquearse ni quitarse su propio rol. No existe por ahora una regla empresarial para impedir que otro administrador bloquee al ultimo ADMIN activo.
 
 La pantalla Nueva planilla consulta la distribucion mediante `GET /api/solicitudes/:numeroSolicitud/distribucion`. Express llama al Web Service externo, valida la respuesta y la normaliza antes de devolverla al navegador. Obtener datos no inserta registros SQL.
 
@@ -128,4 +133,5 @@ El contrato, campos, calculos conocidos, errores y reglas pendientes del Web Ser
 - El Web Service institucional disponible usa HTTP dentro de la red interna; su transporte depende del proveedor.
 - El cifrado y los certificados de SQL Server deben definirse segun la infraestructura del despliegue. La configuracion actual corresponde a SQL Server Express local.
 - El rate limiting de login es recomendable antes del despliegue definitivo, pero no forma parte de esta etapa interna.
-- Los scripts `002` a `005` requieren que el operador o runner seleccione explicitamente la base destino con `sqlcmd -d`.
+- Los formularios HTML existentes no tienen proteccion CSRF dedicada; `SameSite=Lax` no sustituye un token CSRF y debe abordarse antes de exponer la aplicacion fuera del entorno controlado.
+- Los scripts `002` a `006` requieren que el operador o runner seleccione explicitamente la base destino con `sqlcmd -d`.
