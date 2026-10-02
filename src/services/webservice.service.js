@@ -1,4 +1,5 @@
 const config = require('../config');
+const { toSecondPrecision } = require('../utils/operational-date');
 const { DisbursementError, normalizeDisbursement } = require('./disbursement.service');
 
 const REQUEST_NUMBER_PATTERN = /^\d{1,30}$/;
@@ -67,7 +68,7 @@ async function getDistribucionDesembolso(numeroSolicitud, options = {}) {
       );
     }
 
-    return normalizeDisbursement(payload, { fechaExtraccion: now() });
+    return normalizeDisbursement(payload, { fechaExtraccion: toSecondPrecision(now()) });
   } catch (error) {
     if (error instanceof DisbursementError) {
       throw error;

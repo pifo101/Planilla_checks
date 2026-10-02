@@ -39,17 +39,17 @@ El navegador nunca llama directamente al servidor externo. Consultar no crea pla
 - Si el envio falla, el borrador se conserva. Si se confirma, queda vacio y la planilla queda en estado `ENVIADA`.
 - El historial del asistente y el flujo final de decision por planilla de Contabilidad usan exclusivamente snapshots persistidos; no vuelven a consultar este Web Service.
 
-La disponibilidad se consulta con `GET /api/solicitudes/:numeroSolicitud/disponibilidad?numeroCheque=...`. Este endpoint protegido solo ejecuta una consulta parametrizada sobre `solicitudes_planilla`.
+La disponibilidad se consulta con `GET /api/solicitudes/:numeroSolicitud/disponibilidad?numeroCheque=...`. Este endpoint exclusivo de `ASISTENTE` comprueba la reserva del numero completo en `solicitudes_asignadas` y la unicidad del cheque. Si existe una reserva, ningun miembro adicional de ese grupo esta disponible.
 
 ## Envio de planilla
 
-`POST /api/planillas` requiere una sesion activa con rol `ASISTENTE`. El body contiene un arreglo `solicitudes` de entre 1 y 100 elementos. Cada elemento envia `numeroSolicitud`, `numeroCheque` y el `submissionToken` firmado que el backend genero al normalizar la consulta. Los miembros grupales tambien envian su `miembroId` protegido por el snapshot y el grupo debe enviarse completo. Todos los tokens del grupo contienen la misma huella firmada de identidades y fecha de extraccion, por lo que no pueden mezclarse miembros obtenidos en consultas distintas. El navegador no envia el numero de acta: durante cada envio el servidor calcula la fecha operativa de Guatemala, consulta `actas_diarias` y guarda el numero vigente como snapshot de la planilla; si falta, responde `DAILY_ACTA_REQUIRED` sin borrar el borrador.
+`POST /api/planillas` requiere una sesion activa con rol `ASISTENTE`. El body contiene un arreglo `solicitudes` de entre 1 y 100 elementos. Cada elemento envia `numeroSolicitud`, `numeroCheque` y el `submissionToken` firmado que el backend genero al normalizar la consulta. Los miembros grupales tambien envian su `miembroId` protegido por el snapshot y el grupo debe enviarse completo. Todos los tokens del grupo contienen la misma fecha de extraccion y huella firmada de identidades, por lo que no pueden mezclarse miembros obtenidos en consultas distintas. El navegador no envia el numero de acta: durante cada envio el servidor calcula la fecha operativa de Guatemala, consulta `actas_diarias` y guarda el numero vigente como snapshot de la planilla; si falta, responde `DAILY_ACTA_REQUIRED` sin borrar el borrador.
 
-El navegador no envia como autoridad el usuario, agencia, codigo, estado, fechas, cliente, metodologia ni montos libres. El token esta ligado al usuario, vence a las ocho horas y protege el snapshot normalizado contra alteraciones. El backend toma usuario y agencia de la sesion revalidada, genera un codigo `PLN-<UUID>`, fuerza el estado `ENVIADA` y genera las fechas. Tambien valida duplicados internos, disponibilidad, metodologia `INDIVIDUAL`, montos enteros no negativos y coherencia financiera. No vuelve a llamar al Web Service institucional durante el POST.
+El navegador no envia como autoridad el usuario, agencia, codigo, estado, fechas, cliente, metodologia ni montos libres. El token esta ligado al usuario, vence a las ocho horas y protege el snapshot normalizado, incluida `fechaExtraccion`, contra alteraciones. El backend recupera de ese token la fecha original; genera por separado `fechaEnvio` al recibir el POST. Tambien toma usuario y agencia de la sesion revalidada, genera un codigo `PLN-<UUID>`, fuerza el estado `ENVIADA` y valida duplicados internos, disponibilidad, montos enteros no negativos y coherencia financiera. No vuelve a llamar al Web Service institucional durante el POST.
 
 Una respuesta exitosa usa estado HTTP `201` y devuelve solamente `id`, `codigo` y `estado` de la planilla. Los errores de estructura o token usan `400`, un envio demasiado grande usa `413`, una metodologia no confirmada usa `422` y los duplicados usan `409`. Autenticacion y rol conservan las respuestas `401` y `403` existentes.
 
-Los prechecks no sustituyen las restricciones UNIQUE de SQL Server. Si otra peticion utiliza una solicitud o cheque entre la comprobacion y el INSERT, el error se devuelve como conflicto `409` sin exponer el mensaje SQL. Un fallo de cualquier INSERT revierte la planilla completa.
+Los prechecks no sustituyen la reserva transaccional de SQL Server. `solicitudes_asignadas.numero_solicitud` permite un solo `planilla_id`; las filas grupales referencian esa reserva y conservan su `miembroId`. Si otra peticion reserva la solicitud o utiliza un cheque entre la comprobacion y el INSERT, el error se devuelve como conflicto `409` sin exponer el mensaje SQL. Un fallo de reserva o de cualquier INSERT revierte la planilla completa.
 
 ## Campos utilizados
 
@@ -59,8 +59,8 @@ Los prechecks no sustituyen las restricciones UNIQUE de SQL Server. Si otra peti
 - `NombreEnCheque`: nombre del cliente y unica clave funcional confirmada para relacionar un Abono a prestamo con su Emision de cheque.
 - `ValorNeto`: monto del cheque o del abono segun su forma.
 - `Gasto01`: se usa como descuento solamente cuando pertenece a una Emision de cheque; en un Abono a prestamo se ignora, incluso si es distinto de cero.
-- `NumeroCredito`: se conserva desde el abono.
-- `OrdenPago`: se conserva desde la emision de cheque y no es el numero de cheque.
+- `NumeroCredito`: se interpreta desde el abono cuando corresponde, pero actualmente no se persiste historicamente.
+- `OrdenPago`: se interpreta desde la emision de cheque y no es el numero de cheque; actualmente no se persiste historicamente.
 - `Ejecutado`: debe ser estrictamente `true` en todos los registros de la distribucion. Cualquier otro valor bloquea la solicitud completa.
 
 Los campos `Gasto02-Gasto10` no participan actualmente en el calculo, sin importar la forma de desembolso.
@@ -80,7 +80,7 @@ montoAprobado  = montoCancelado + descuentos + montoCheque
 
 `Gasto01` del abono no se suma, no se trata como descuento y no invalida la distribucion. Los mismos calculos se aplican a cada emision grupal y a su posible abono asociado.
 
-Los importes se convierten a centavos enteros antes de sumarlos y se devuelven con dos decimales. La fecha de extraccion la genera Planilla Checks al recibir correctamente la respuesta.
+Los importes se convierten a centavos enteros antes de sumarlos y se devuelven con dos decimales. La fecha de extraccion la genera Planilla Checks al recibir y validar correctamente la respuesta, se normaliza a segundos, se firma y se persiste como instante independiente de `fecha_envio`.
 
 `cantidadCheques` cuenta solo elementos con `FormaDesembolso = 1`. Una emision produce metodologia `INDIVIDUAL`; dos o mas producen `GRUPAL`, y cada emision produce un miembro/cuadro. Cada miembro puede carecer de abono o tener exactamente uno asociado por `NombreEnCheque`; un miembro que tenga unicamente abono no es valido.
 
@@ -102,7 +102,7 @@ El endpoint institucional disponible actualmente usa HTTP sin cifrado. Planilla 
 
 ## Consultas por numero de solicitud
 
-Por definicion del proceso institucional, las consultas no estan restringidas por agencia. Un usuario autorizado puede consultar cualquier numero de solicitud valido. Al enviar, la agencia se obtiene del asistente autenticado para identificar la procedencia de la planilla; no autoriza ni restringe la consulta de una solicitud.
+Por definicion del proceso institucional, las consultas no estan restringidas por agencia. Un `ASISTENTE` autenticado puede consultar cualquier numero de solicitud valido. `ADMIN` y `CONTABILIDAD` no operan estos endpoints. Al enviar, la agencia se obtiene del asistente autenticado para identificar la procedencia de la planilla; no autoriza ni restringe la consulta de una solicitud.
 
 ## Datos observados
 

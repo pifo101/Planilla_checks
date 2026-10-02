@@ -56,6 +56,16 @@ async function insertSolicitud(transaction, planillaId, solicitud) {
   return result.recordset[0];
 }
 
+async function assignSolicitud(transaction, planillaId, numeroSolicitud) {
+  await new sql.Request(transaction)
+    .input('planillaId', sql.BigInt, planillaId)
+    .input('numeroSolicitud', sql.NVarChar(50), numeroSolicitud)
+    .query(`
+      INSERT INTO dbo.solicitudes_asignadas (numero_solicitud, planilla_id)
+      VALUES (@numeroSolicitud, @planillaId);
+    `);
+}
+
 async function createWithSolicitudes(planilla, solicitudes) {
   const pool = await getPool();
   const transaction = new sql.Transaction(pool);
@@ -65,6 +75,10 @@ async function createWithSolicitudes(planilla, solicitudes) {
   try {
     const created = await insertPlanilla(transaction, planilla);
     const createdSolicitudes = [];
+
+    for (const numeroSolicitud of new Set(solicitudes.map((item) => item.numeroSolicitud))) {
+      await assignSolicitud(transaction, created.id, numeroSolicitud);
+    }
 
     for (const solicitud of solicitudes) {
       createdSolicitudes.push(await insertSolicitud(transaction, created.id, solicitud));
@@ -388,7 +402,7 @@ async function findSolicitudUsage(numeroSolicitud, numeroCheque) {
       SELECT
         CAST(CASE WHEN EXISTS (
           SELECT 1
-          FROM dbo.solicitudes_planilla
+          FROM dbo.solicitudes_asignadas
           WHERE numero_solicitud = @numeroSolicitud
         ) THEN 1 ELSE 0 END AS BIT) AS solicitudUtilizada,
         CAST(CASE WHEN EXISTS (

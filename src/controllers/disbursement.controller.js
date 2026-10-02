@@ -58,6 +58,7 @@ async function getDistribution(req, res) {
           {
             ...miembro,
             metodologia: 'GRUPAL',
+            fechaExtraccion: data.fechaExtraccion,
             cantidadMiembros: data.miembros.length,
             grupoFingerprint,
           },

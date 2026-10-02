@@ -18,7 +18,7 @@ const user = { id: 10, rol: 'ASISTENTE', agenciaId: 20 };
 const now = new Date('2026-09-29T14:00:00.000Z');
 
 function validRequest(overrides = {}) {
-  const { tokenNow = now, ...requestOverrides } = overrides;
+  const { tokenNow = now, extractionNow = new Date('2026-09-29T13:45:12.789Z'), ...requestOverrides } = overrides;
   const values = {
     numeroSolicitud: '123456',
     cliente: 'CLIENTE PRUEBA',
@@ -34,6 +34,7 @@ function validRequest(overrides = {}) {
     ...requestOverrides,
   };
   const submissionToken = createSubmissionToken(user.id, values.numeroSolicitud, {
+    fechaExtraccion: extractionNow,
     cliente: values.cliente,
     metodologia: values.metodologia,
     montoAprobado: values.montoAprobadoCentavos / 100,
@@ -107,7 +108,7 @@ test('crea una planilla ENVIADA usando usuario, agencia, fecha y codigo del serv
     montoCancelado: 2500,
     descuentos: 500,
     montoCheque: 9000,
-    fechaExtraccion: now,
+    fechaExtraccion: new Date('2026-09-29T13:45:12.000Z'),
     estado: 'PENDIENTE',
   });
 });
@@ -161,6 +162,16 @@ test('acepta montos coherentes y metodologia INDIVIDUAL', () => {
   const requests = validateSubmission(submission(validRequest()), { userId: user.id, now });
   assert.equal(requests[0].montoAprobado, 12000);
   assert.equal(requests[0].metodologia, 'INDIVIDUAL');
+  assert.equal(requests[0].fechaExtraccion.toISOString(), '2026-09-29T13:45:12.000Z');
+});
+
+test('ignora una fecha de extraccion libre y conserva la firmada', () => {
+  const requests = validateSubmission(submission({
+    ...validRequest(),
+    fechaExtraccion: '2000-01-01T00:00:00.000Z',
+  }), { userId: user.id, now });
+
+  assert.equal(requests[0].fechaExtraccion.toISOString(), '2026-09-29T13:45:12.000Z');
 });
 
 test('acepta todos los miembros de un grupo calculado e identificado', () => {
@@ -169,6 +180,7 @@ test('acepta todos los miembros de un grupo calculado e identificado', () => {
     validRequest({ metodologia: 'GRUPAL', miembroId: '19537', cantidadMiembros: 2, grupoFingerprint: 'a'.repeat(43), numeroCheque: 'CHK-101' }),
   ), { userId: user.id, now });
   assert.deepEqual(requests.map((item) => item.miembroId), ['19536', '19537']);
+  assert.ok(requests.every((item) => item.fechaExtraccion.toISOString() === '2026-09-29T13:45:12.000Z'));
 });
 
 test('rechaza un grupo incompleto y una identidad de miembro manipulada', () => {
@@ -298,7 +310,7 @@ test('consulta el acta correspondiente al instante efectivo del envio', async ()
 });
 
 for (const [constraint, expectedCode] of [
-  ['UQ_solicitudes_numero_solicitud', 'REQUEST_ALREADY_USED'],
+  ['PK_solicitudes_asignadas', 'REQUEST_ALREADY_USED'],
   ['UQ_solicitudes_numero_cheque', 'CHECK_ALREADY_USED'],
 ]) {
   test(`convierte una carrera UNIQUE de ${constraint} en conflicto controlado`, async () => {

@@ -13,7 +13,7 @@ test('construye un GET seguro y normaliza la respuesta', async () => {
   let capturedOptions;
   const result = await getDistribucionDesembolso('123456', {
     baseUrl,
-    now: () => new Date('2026-09-23T12:00:00.000Z'),
+    now: () => new Date('2026-09-23T12:00:00.537Z'),
     fetchImpl: async (url, options) => {
       capturedUrl = url;
       capturedOptions = options;
@@ -26,6 +26,7 @@ test('construye un GET seguro y normaliza la respuesta', async () => {
   assert.equal(capturedOptions.body, undefined);
   assert.equal(capturedOptions.redirect, 'manual');
   assert.equal(result.montoAprobado, 1000);
+  assert.equal(result.fechaExtraccion.toISOString(), '2026-09-23T12:00:00.000Z');
 });
 
 test('rechaza numeros de solicitud inseguros', async () => {

@@ -86,6 +86,17 @@ GO
 
 IF OBJECT_ID(N'dbo.solicitudes_planilla', N'U') IS NULL
 BEGIN
+    IF OBJECT_ID(N'dbo.solicitudes_asignadas', N'U') IS NULL
+    BEGIN
+        CREATE TABLE dbo.solicitudes_asignadas (
+            numero_solicitud NVARCHAR(50) NOT NULL CONSTRAINT PK_solicitudes_asignadas PRIMARY KEY,
+            planilla_id BIGINT NOT NULL,
+            CONSTRAINT UQ_solicitudes_asignadas_numero_planilla UNIQUE (numero_solicitud, planilla_id),
+            CONSTRAINT FK_solicitudes_asignadas_planillas FOREIGN KEY (planilla_id)
+                REFERENCES dbo.planillas (id) ON DELETE CASCADE
+        );
+    END;
+
     CREATE TABLE dbo.solicitudes_planilla (
         id BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT PK_solicitudes_planilla PRIMARY KEY,
         planilla_id BIGINT NOT NULL,
@@ -117,7 +128,9 @@ BEGIN
             (procesado = 0 AND fecha_procesado IS NULL)
             OR (procesado = 1 AND fecha_procesado IS NOT NULL)
         ),
-        CONSTRAINT FK_solicitudes_planillas FOREIGN KEY (planilla_id) REFERENCES dbo.planillas (id)
+        CONSTRAINT FK_solicitudes_planillas FOREIGN KEY (planilla_id) REFERENCES dbo.planillas (id),
+        CONSTRAINT FK_solicitudes_asignacion FOREIGN KEY (numero_solicitud, planilla_id)
+            REFERENCES dbo.solicitudes_asignadas (numero_solicitud, planilla_id)
     );
 END;
 GO

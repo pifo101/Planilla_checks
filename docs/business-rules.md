@@ -6,11 +6,11 @@ Antes de agregar, Planilla Checks consulta SQL Server para comprobar que el nume
 
 Reglas del flujo:
 
-1. Una solicitud individual no puede repetirse despues de haber sido enviada. En una solicitud grupal, cada `ID` tecnico de emision puede persistirse una sola vez para el mismo numero de solicitud. Este ID no identifica funcionalmente a la persona ni relaciona abonos con emisiones.
+1. Una solicitud individual no puede repetirse despues de haber sido enviada. Una solicitud grupal completa pertenece a una sola planilla: todos sus miembros comparten `numero_solicitud` y `planilla_id`. Dentro de esa planilla, cada `ID` tecnico de emision puede persistirse una sola vez. Este ID no identifica funcionalmente a la persona ni relaciona abonos con emisiones.
 2. El numero de cheque debe ser unico y nunca reutilizarse.
-3. Las consultas de distribucion de desembolso no estan restringidas por agencia. Un usuario autorizado puede consultar cualquier numero de solicitud valido.
+3. Las consultas de distribucion de desembolso no estan restringidas por agencia, pero son operativas del rol `ASISTENTE`. Un asistente autenticado puede consultar cualquier numero de solicitud valido.
 4. La agencia y el usuario creador se obtienen de la sesion autenticada; nunca se aceptan IDs arbitrarios del navegador.
-5. La fecha de extraccion debe utilizar la fecha y hora del sistema.
+5. La fecha de extraccion es el instante en que el backend obtiene y valida la respuesta del Web Service. Se normaliza a segundos, se firma dentro del snapshot HMAC y se persiste sin sustituirla por la fecha posterior de envio.
 6. El monto aprobado depende de la informacion recibida del Web Service:
    - Sin cancelacion: `montoAprobado = descuentos + montoCheque`.
    - Con cancelacion: `montoAprobado = descuentos + montoCheque + montoCancelado`.
@@ -28,8 +28,8 @@ Reglas del flujo:
 15. `Limpiar` elimina solamente la consulta activa y conserva las solicitudes agregadas al borrador.
 16. `Enviar planilla` crea una planilla con estado `ENVIADA`; el codigo tecnico, la fecha de envio y los estados son generados por el servidor.
 17. El envio admite como maximo tecnico 100 solicitudes por peticion. Este limite protege el servicio y no representa una regla funcional definitiva.
-18. El backend emite un snapshot firmado de cada consulta valida. Al enviar, verifica que pertenezca al usuario, que no haya vencido y que sus importes en centavos cumplan `montoAprobado = montoCancelado + descuentos + montoCheque`.
-19. La comprobacion previa de disponibilidad mejora la respuesta al usuario, pero los constraints UNIQUE de SQL Server son la defensa final ante concurrencia.
+18. El backend emite un snapshot firmado de cada consulta valida. Al enviar, verifica que pertenezca al usuario, que no haya vencido, que conserve la fecha de extraccion autoritativa y que sus importes en centavos cumplan `montoAprobado = montoCancelado + descuentos + montoCheque`.
+19. La disponibilidad opera por solicitud completa: si el numero ya fue asignado, ningun miembro restante puede agregarse. La comprobacion previa mejora la respuesta al usuario; la reserva unica `solicitudes_asignadas.numero_solicitud` dentro de la transaccion es la defensa final ante concurrencia.
 20. Cada emision de cheque de una solicitud grupal representa un miembro y genera un cuadro y una fila independientes.
 21. `NombreEnCheque` relaciona un abono con una emision. Para comparar se recortan extremos, se colapsan espacios consecutivos y se ignoran diferencias de mayusculas/minusculas. No se quitan acentos o partes del nombre y no se usa fuzzy matching.
 22. Un miembro grupal puede tener solo una emision, o una emision y un abono del mismo nombre normalizado. Un abono sin emision correspondiente no es valido.
@@ -54,16 +54,13 @@ Reglas del flujo:
 41. La administracion permite cambiar solamente rol, agencia y estado. No edita nombre, correo ni contrasena y no elimina fisicamente usuarios.
 42. Un `ADMIN` no puede bloquearse ni quitarse su propio rol. No se ha confirmado una regla adicional de ultimo administrador activo.
 43. Bloqueos, cambios de rol y cambios de agencia se aplican en la siguiente peticion protegida porque la sesion se revalida contra SQL Server.
-<<<<<<< HEAD
 44. Solo `CONTABILIDAD` puede decidir traslado. `ASISTENTE`, `ADMIN` y usuarios no autenticados no pueden hacerlo; fecha y usuario proceden del servidor.
 45. `Trasladada` registra que Contabilidad traslado la planilla al proceso posterior. No aprueba creditos, solicitudes o desembolsos.
 46. `No trasladada` registra unicamente que la planilla no fue trasladada. No rechaza creditos ni devuelve solicitudes a una agencia.
 47. La primera decision gana mediante un `UPDATE` atomico condicionado por `trasladado IS NULL`. Una decision existente no se edita mediante el flujo normal.
 48. El historial general contiene `trasladado IS NOT NULL` y filtra por el dia de `fecha_decision_traslado` en `America/Guatemala`, agencia y resultado. `fecha_envio` permanece visible.
 49. `ENVIADA`, `RECIBIDA` y `PROCESADA` siguen siendo estados tecnicos legados de `planillas`; `RECIBIDA` y `PROCESADA` no representan la decision de traslado y esta feature no los modifica.
-=======
-44. El dashboard es exclusivo de `ADMIN`, de solo lectura y resume mediante agregaciones SQL usuarios, estados, roles, agencias y asistentes asociados. No muestra actividad reciente porque no existe auditoria administrativa persistida.
->>>>>>> origin/main
+50. El dashboard es exclusivo de `ADMIN`, de solo lectura y resume mediante agregaciones SQL usuarios, estados, roles, agencias y asistentes asociados. No muestra actividad reciente porque no existe auditoria administrativa persistida.
 
 ## Pendientes de confirmacion del ingeniero
 
