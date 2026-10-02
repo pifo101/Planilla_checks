@@ -59,7 +59,13 @@ sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\004_group_members.sql
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\005_daily_actas.sql" -b
 ```
 
-No se incluyen agencias de demostracion. Las agencias institucionales deben cargarse con sus codigos y nombres reales antes de crear asistentes.
+Para preparar el entorno local, define las variables `DEV_ADMIN_*`, `DEV_ASSISTANT_*`, `DEV_ACCOUNTING_*` y `DEV_ASSISTANT_AGENCY_CODE` documentadas en `.env.example`, usando contrasenas locales de al menos 12 caracteres. Luego ejecuta:
+
+```powershell
+npm run seed:dev
+```
+
+El seed solo acepta `PlanillaChecksDB` en SQL Server Express local y se bloquea en produccion y en la base de integracion. Dentro de una transaccion crea o actualiza las diez agencias operativas (`001`, `002`, `004` a `011`) y restaura las cuentas locales `ADMIN`, `ASISTENTE` y `CONTABILIDAD`. Es idempotente, no imprime credenciales ni hashes y no elimina agencias adicionales: las conserva y reporta sus codigos para evitar afectar referencias existentes.
 
 `001_create_database.sql` es un bootstrap opcional que crea unicamente `PlanillaChecksDB`. Para otro `DB_DATABASE`, la base debe existir previamente y los scripts `002` a `005` deben ejecutarse con `-d` apuntando explicitamente a ella.
 

@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
+    "seed:dev": "node scripts/seed-development.js",
     "create-admin": "node scripts/create-admin.js",
     "test": "npm run test:webservice && npm run test:integration",
     "test:webservice": "node --test tests/*.test.js",
