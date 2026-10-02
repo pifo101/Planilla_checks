@@ -12,13 +12,20 @@ test('configura una base separada reconocible como base de pruebas', () => {
 test('integracion rechaza una base que no sea de pruebas', () => {
   assert.throws(
     () => configureIntegrationEnvironment({ DB_DATABASE: 'PlanillaChecksDB', TEST_DB_DATABASE: 'PlanillaChecksProd' }),
-    /termine en TestDB/,
+    /exactamente PlanillaChecksTestDB/,
+  );
+});
+
+test('integracion rechaza otra base aunque termine en TestDB', () => {
+  assert.throws(
+    () => configureIntegrationEnvironment({ DB_DATABASE: 'PlanillaChecksDB', TEST_DB_DATABASE: 'OtherTestDB' }),
+    /exactamente PlanillaChecksTestDB/,
   );
 });
 
 test('integracion rechaza reutilizar la base de desarrollo', () => {
   assert.throws(
-    () => configureIntegrationEnvironment({ DB_DATABASE: 'SameTestDB', TEST_DB_DATABASE: 'SameTestDB' }),
+    () => configureIntegrationEnvironment({ DB_DATABASE: 'PlanillaChecksTestDB', TEST_DB_DATABASE: 'PlanillaChecksTestDB' }),
     /distinta de DB_DATABASE/,
   );
 });

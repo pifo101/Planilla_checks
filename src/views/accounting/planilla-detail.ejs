@@ -3,8 +3,8 @@
 <div class="app-body">
   <%- include('../partials/sidebar') %>
   <main class="app-main">
-    <a class="btn btn-sm btn-outline-secondary mb-3" href="/contabilidad/planillas"><i class="bi bi-arrow-left me-1"></i>Volver a planillas</a>
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-4"><div><div class="page-eyebrow">Contabilidad</div><h1 class="h3 mb-1">Planilla <%= planilla.codigo %></h1><p class="text-muted mb-0">Detalle historico de solo lectura.</p></div><span class="status-badge status-<%= planilla.estado.toLowerCase() %>"><%= planilla.estado %></span></div>
+    <a class="btn btn-sm btn-outline-secondary mb-3" href="<%= planilla.trasladado == null ? '/contabilidad/planillas' : '/contabilidad/historial' %>"><i class="bi bi-arrow-left me-1"></i>Volver</a>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-4"><div><div class="page-eyebrow">Contabilidad</div><h1 class="h3 mb-1">Planilla <%= planilla.codigo %></h1><p class="text-muted mb-0">Detalle de solo lectura; abrirlo no toma una decision.</p></div><span class="badge <%= planilla.trasladado == null ? 'text-bg-warning' : (planilla.trasladado ? 'text-bg-success' : 'text-bg-danger') %>"><%= planilla.trasladado == null ? 'Pendiente' : (planilla.trasladado ? 'Trasladada' : 'No trasladada') %></span></div>
 
     <section class="card mb-4" aria-labelledby="planilla-information-title"><div class="card-body p-4"><h2 class="h5 mb-3" id="planilla-information-title">Informacion de la planilla</h2><div class="row g-4">
       <div class="col-6 col-lg"><div class="detail-label">Agencia</div><div class="fw-semibold"><%= planilla.agenciaNombre %></div></div>
@@ -13,6 +13,8 @@
       <div class="col-6 col-lg"><div class="detail-label">Fecha de envio</div><div class="fw-semibold"><%= dateTime.format(planilla.fechaEnvio) %></div></div>
       <div class="col-6 col-lg"><div class="detail-label">Usuario creador</div><div class="fw-semibold"><%= planilla.creadaPor %></div></div>
       <div class="col-6 col-lg"><div class="detail-label">Estado</div><div class="fw-semibold"><%= planilla.estado %></div></div>
+      <div class="col-6 col-lg"><div class="detail-label">Fecha de decision</div><div class="fw-semibold"><%= planilla.fechaDecisionTraslado ? dateTime.format(planilla.fechaDecisionTraslado) : 'Pendiente' %></div></div>
+      <div class="col-6 col-lg"><div class="detail-label">Decision tomada por</div><div class="fw-semibold"><%= planilla.decisionTrasladoUsuario || 'Pendiente' %></div></div>
     </div></div></section>
 
     <section class="card mb-4" aria-labelledby="requests-table-title"><div class="card-header bg-white border-0 px-4 pt-4"><h2 class="h5 mb-0" id="requests-table-title">Solicitudes y miembros</h2></div><div class="table-responsive"><table class="table table-hover mb-0"><caption class="visually-hidden">Registros de la planilla <%= planilla.codigo %></caption><thead><tr><th>Solicitud</th><th>Miembro tecnico</th><th>Cliente</th><th>Aprobado</th><th>Cancelado</th><th>Descuentos</th><th>Monto cheque</th><th>Numero cheque</th><th>Metodologia</th><th>Estado</th><th>Procesado</th><th>Fecha procesamiento</th></tr></thead><tbody>

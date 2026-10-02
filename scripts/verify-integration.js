@@ -164,7 +164,7 @@ async function main() {
     rol: 'CONTABILIDAD',
     activo: false,
   });
-  await userRepository.create({
+  const accountingUser = await userRepository.create({
     nombre: 'Contabilidad temporal',
     email: accountingEmail,
     passwordHash,
@@ -796,6 +796,23 @@ async function main() {
   assert.equal(accountingLogin.status, 302);
   assert.equal(accountingLogin.headers.get('location'), '/contabilidad/planillas');
   const accountingCookie = accountingLogin.headers.get('set-cookie').split(';', 1)[0];
+  const oldPendingPlanilla = await planillaRepository.createWithSolicitudes({
+    codigo: `PLN-OLD-${suffix}`,
+    agenciaId: alternateAgencyId,
+    usuarioId: alternateServiceUser.id,
+    fechaEnvio: new Date('2020-01-15T15:00:00.000Z'),
+    estado: 'ENVIADA',
+    numeroActa: dailyActa.numeroActa,
+  }, [{
+    ...repositorySolicitud,
+    numeroSolicitud: `OLD-${suffix}`,
+    numeroCheque: `OLD-${suffix}`,
+    montoAprobado: 10,
+    montoCancelado: 0,
+    descuentos: 1,
+    montoCheque: 9,
+    fechaExtraccion: new Date('2020-01-15T15:00:00.000Z'),
+  }]);
   const fixturePlanillaIds = [createdPlanilla.id, groupedPlanilla.id, alternatePlanilla.id];
   async function readAccountingState() {
     const state = await pool.request()
@@ -825,9 +842,13 @@ async function main() {
   assert.match(accountingHtml, new RegExp(`PLN-${suffix}`));
   assert.match(accountingHtml, new RegExp(`PLN-G-${suffix}`));
   assert.match(accountingHtml, new RegExp(`PLN-ALT-${suffix}`));
+  assert.match(accountingHtml, new RegExp(`PLN-OLD-${suffix}`));
   assert.match(accountingHtml, new RegExp(`Agencia temporal ${suffix}`));
   assert.match(accountingHtml, new RegExp(`Agencia alterna ${suffix}`));
   assert.match(accountingHtml, new RegExp(dailyActa.numeroActa));
+  const csrfTokenMatch = accountingHtml.match(/name="_csrf" value="([A-Za-z0-9_-]+)"/);
+  assert.ok(csrfTokenMatch);
+  const accountingCsrfToken = csrfTokenMatch[1];
 
   const primaryAgencyList = await fetch(`${baseUrl}/contabilidad/planillas?fecha=${historyDate}&agencia=${agenciaId}`, {
     headers: { cookie: accountingCookie },
@@ -837,10 +858,10 @@ async function main() {
   assert.match(primaryAgencyHtml, new RegExp(`PLN-${suffix}`));
   assert.match(primaryAgencyHtml, new RegExp(`PLN-G-${suffix}`));
   assert.doesNotMatch(primaryAgencyHtml, new RegExp(`PLN-ALT-${suffix}`));
-  assert.match(primaryAgencyHtml, /Q\s*7,500\.00/);
+  assert.match(primaryAgencyHtml, /Q\s*8,500\.00/);
   assert.match(primaryAgencyHtml, /Q\s*700\.00/);
-  assert.match(primaryAgencyHtml, /Q\s*600\.00/);
-  assert.match(primaryAgencyHtml, /Q\s*6,200\.00/);
+  assert.match(primaryAgencyHtml, /Q\s*700\.00/);
+  assert.match(primaryAgencyHtml, /Q\s*7,100\.00/);
 
   const alternateAgencyList = await fetch(`${baseUrl}/contabilidad/planillas?fecha=${historyDate}&agencia=${alternateAgencyId}`, {
     headers: { cookie: accountingCookie },
@@ -875,18 +896,123 @@ async function main() {
   assert.match(await accountingAlternateDetail.text(), new RegExp(`Agencia alterna ${suffix}`));
   assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/0`, { headers: { cookie: accountingCookie } })).status, 400);
   assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/999999999999999`, { headers: { cookie: accountingCookie } })).status, 404);
-  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas?fecha=2026-02-30`, { headers: { cookie: accountingCookie } })).status, 400);
   assert.equal((await fetch(`${baseUrl}/contabilidad/planillas?agencia=0`, { headers: { cookie: accountingCookie } })).status, 400);
   assert.equal((await fetch(`${baseUrl}/contabilidad/planillas?agencia=999999999`, { headers: { cookie: accountingCookie } })).status, 400);
   assert.equal((await fetch(`${baseUrl}/contabilidad/planillas?page=0`, { headers: { cookie: accountingCookie } })).status, 400);
-  const emptyAccounting = await fetch(`${baseUrl}/contabilidad/planillas?fecha=2000-01-01`, {
-    headers: { cookie: accountingCookie },
-  });
-  assert.equal(emptyAccounting.status, 200);
-  assert.match(await emptyAccounting.text(), /No hay planillas para la fecha y agencia seleccionadas/);
-
   const stateAfterAccountingGets = await readAccountingState();
   assert.deepEqual(stateAfterAccountingGets, stateBeforeAccountingGets);
+
+  const requestsBeforeDecision = await pool.request()
+    .input('createdId', sql.BigInt, createdPlanilla.id)
+    .input('alternateId', sql.BigInt, alternatePlanilla.id)
+    .query(`
+      SELECT planilla_id AS planillaId, id, estado, procesado, fecha_procesado AS fechaProcesado
+      FROM dbo.solicitudes_planilla
+      WHERE planilla_id IN (@createdId, @alternateId)
+      ORDER BY planilla_id, id;
+    `);
+  const transferredResponse = await fetch(`${baseUrl}/contabilidad/planillas/${createdPlanilla.id}/traslado`, {
+    method: 'POST',
+    headers: { cookie: accountingCookie, 'content-type': 'application/json', 'x-csrf-token': accountingCsrfToken },
+    body: JSON.stringify({ trasladado: true, usuarioId: 999, fechaDecisionTraslado: '2000-01-01' }),
+  });
+  assert.equal(transferredResponse.status, 200);
+  assert.equal((await transferredResponse.json()).data.decision.trasladado, true);
+  const notTransferredResponse = await fetch(`${baseUrl}/contabilidad/planillas/${alternatePlanilla.id}/traslado`, {
+    method: 'POST',
+    headers: { cookie: accountingCookie, 'content-type': 'application/json', 'x-csrf-token': accountingCsrfToken },
+    body: JSON.stringify({ trasladado: false }),
+  });
+  assert.equal(notTransferredResponse.status, 200);
+  assert.equal((await notTransferredResponse.json()).data.decision.trasladado, false);
+
+  const decisions = await pool.request()
+    .input('createdId', sql.BigInt, createdPlanilla.id)
+    .input('alternateId', sql.BigInt, alternatePlanilla.id)
+    .query(`
+      SELECT id, trasladado, fecha_decision_traslado AS fechaDecisionTraslado,
+             decision_traslado_usuario_id AS decisionTrasladoUsuarioId, estado
+      FROM dbo.planillas
+      WHERE id IN (@createdId, @alternateId)
+      ORDER BY id;
+    `);
+  assert.deepEqual(decisions.recordset.map((row) => Boolean(row.trasladado)), [true, false]);
+  assert.ok(decisions.recordset.every((row) => Number(row.decisionTrasladoUsuarioId) === Number(accountingUser.id)));
+  assert.ok(decisions.recordset.every((row) => row.fechaDecisionTraslado instanceof Date));
+  assert.ok(decisions.recordset.every((row) => row.estado === 'ENVIADA'));
+
+  const requestsAfterDecision = await pool.request()
+    .input('createdId', sql.BigInt, createdPlanilla.id)
+    .input('alternateId', sql.BigInt, alternatePlanilla.id)
+    .query(`
+      SELECT planilla_id AS planillaId, id, estado, procesado, fecha_procesado AS fechaProcesado
+      FROM dbo.solicitudes_planilla
+      WHERE planilla_id IN (@createdId, @alternateId)
+      ORDER BY planilla_id, id;
+    `);
+  assert.deepEqual(requestsAfterDecision.recordset, requestsBeforeDecision.recordset);
+
+  const pendingAfterDecisions = await fetch(`${baseUrl}/contabilidad/planillas`, { headers: { cookie: accountingCookie } });
+  const pendingAfterDecisionsHtml = await pendingAfterDecisions.text();
+  assert.doesNotMatch(pendingAfterDecisionsHtml, new RegExp(`PLN-${suffix}(?![-A-Z])`));
+  assert.doesNotMatch(pendingAfterDecisionsHtml, new RegExp(`PLN-ALT-${suffix}`));
+  assert.match(pendingAfterDecisionsHtml, new RegExp(`PLN-OLD-${suffix}`));
+
+  const secondDecision = await fetch(`${baseUrl}/contabilidad/planillas/${createdPlanilla.id}/traslado`, {
+    method: 'POST',
+    headers: { cookie: accountingCookie, 'content-type': 'application/json', 'x-csrf-token': accountingCsrfToken },
+    body: JSON.stringify({ trasladado: false }),
+  });
+  assert.equal(secondDecision.status, 409);
+  assert.equal((await secondDecision.json()).error.code, 'TRANSFER_DECISION_ALREADY_MADE');
+
+  const decisionDate = getOperationalDate(new Date());
+  const historyResponse = await fetch(`${baseUrl}/contabilidad/historial?fecha=${decisionDate}`, {
+    headers: { cookie: accountingCookie },
+  });
+  assert.equal(historyResponse.status, 200);
+  const transferHistoryHtml = await historyResponse.text();
+  assert.match(transferHistoryHtml, new RegExp(`PLN-${suffix}`));
+  assert.match(transferHistoryHtml, new RegExp(`PLN-ALT-${suffix}`));
+  assert.match(transferHistoryHtml, /Trasladada/);
+  assert.match(transferHistoryHtml, /No trasladada/);
+  assert.match(transferHistoryHtml, /Contabilidad temporal/);
+  assert.match(transferHistoryHtml, new RegExp(dailyActa.numeroActa));
+
+  const transferredHistory = await fetch(`${baseUrl}/contabilidad/historial?fecha=${decisionDate}&agencia=${agenciaId}&resultado=trasladadas`, { headers: { cookie: accountingCookie } });
+  const transferredHistoryHtml = await transferredHistory.text();
+  assert.match(transferredHistoryHtml, new RegExp(`PLN-${suffix}`));
+  assert.doesNotMatch(transferredHistoryHtml, new RegExp(`PLN-ALT-${suffix}`));
+  const notTransferredHistory = await fetch(`${baseUrl}/contabilidad/historial?fecha=${decisionDate}&agencia=${alternateAgencyId}&resultado=no-trasladadas`, { headers: { cookie: accountingCookie } });
+  const notTransferredHistoryHtml = await notTransferredHistory.text();
+  assert.match(notTransferredHistoryHtml, new RegExp(`PLN-ALT-${suffix}`));
+  assert.doesNotMatch(notTransferredHistoryHtml, new RegExp(`PLN-${suffix}(?![-A-Z])`));
+
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/${oldPendingPlanilla.id}/traslado`, {
+    method: 'POST', headers: { cookie: reactivatedCookie, 'content-type': 'application/json' }, body: JSON.stringify({ trasladado: true }),
+  })).status, 403);
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/${oldPendingPlanilla.id}/traslado`, {
+    method: 'POST', headers: { cookie: adminCookie, 'content-type': 'application/json' }, body: JSON.stringify({ trasladado: true }),
+  })).status, 403);
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/${oldPendingPlanilla.id}/traslado`, {
+    method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ trasladado: true }),
+  })).status, 302);
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/${oldPendingPlanilla.id}/traslado`, {
+    method: 'POST', headers: { cookie: accountingCookie, 'content-type': 'application/json' }, body: JSON.stringify({ trasladado: true }),
+  })).status, 403);
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/${oldPendingPlanilla.id}/traslado`, {
+    method: 'POST', headers: { cookie: accountingCookie, 'content-type': 'application/json', 'x-csrf-token': accountingCsrfToken }, body: JSON.stringify({ trasladado: 'si' }),
+  })).status, 400);
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/0/traslado`, {
+    method: 'POST', headers: { cookie: accountingCookie, 'content-type': 'application/json', 'x-csrf-token': accountingCsrfToken }, body: JSON.stringify({ trasladado: true }),
+  })).status, 400);
+  const malformedDecision = await fetch(`${baseUrl}/contabilidad/planillas/${oldPendingPlanilla.id}/traslado`, {
+    method: 'POST',
+    headers: { cookie: accountingCookie, 'content-type': 'application/json', 'x-csrf-token': accountingCsrfToken },
+    body: '{',
+  });
+  assert.equal(malformedDecision.status, 400);
+  assert.equal((await malformedDecision.json()).error.code, 'INVALID_JSON');
 
   const forbiddenApi = await fetch(`${baseUrl}/api/solicitudes/123/distribucion`, {
     headers: { cookie: accountingCookie },

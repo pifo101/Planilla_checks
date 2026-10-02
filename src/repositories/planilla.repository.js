@@ -175,37 +175,30 @@ async function findDetailForAgency(id, agenciaId) {
   return { ...result.recordsets[0][0], solicitudes: result.recordsets[1] };
 }
 
-async function findForAccounting(startDate, endDate, agenciaId, page, pageSize) {
+async function findPendingForAccounting(agenciaId, page, pageSize) {
   const pool = await getPool();
   const offset = (page - 1) * pageSize;
   const result = await pool.request()
-    .input('startDate', sql.DateTime2(0), startDate)
-    .input('endDate', sql.DateTime2(0), endDate)
     .input('agenciaId', sql.Int, agenciaId)
     .input('offset', sql.Int, offset)
     .input('pageSize', sql.Int, pageSize)
     .query(`
       SELECT COUNT(*) AS total
       FROM dbo.planillas AS p
-      WHERE p.estado IN ('ENVIADA', 'RECIBIDA', 'PROCESADA')
-        AND p.fecha_envio >= @startDate
-        AND p.fecha_envio < @endDate
+      WHERE p.trasladado IS NULL
+        AND p.fecha_envio IS NOT NULL
         AND (@agenciaId IS NULL OR p.agencia_id = @agenciaId);
 
       SELECT COUNT(DISTINCT p.id) AS cantidadPlanillas,
              COUNT(sp.id) AS cantidadRegistros,
-             COUNT(DISTINCT CASE WHEN p.estado = 'ENVIADA' THEN p.id END) AS cantidadEnviadas,
-             COUNT(DISTINCT CASE WHEN p.estado = 'RECIBIDA' THEN p.id END) AS cantidadRecibidas,
-             COUNT(DISTINCT CASE WHEN p.estado = 'PROCESADA' THEN p.id END) AS cantidadProcesadas,
              CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_aprobado), CONVERT(DECIMAL(18, 2), 0))) AS totalAprobado,
              CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cancelado), CONVERT(DECIMAL(18, 2), 0))) AS totalCancelado,
              CONVERT(VARCHAR(40), COALESCE(SUM(sp.descuentos), CONVERT(DECIMAL(18, 2), 0))) AS totalDescuentos,
              CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cheque), CONVERT(DECIMAL(18, 2), 0))) AS totalMontoCheque
       FROM dbo.planillas AS p
       LEFT JOIN dbo.solicitudes_planilla AS sp ON sp.planilla_id = p.id
-      WHERE p.estado IN ('ENVIADA', 'RECIBIDA', 'PROCESADA')
-        AND p.fecha_envio >= @startDate
-        AND p.fecha_envio < @endDate
+      WHERE p.trasladado IS NULL
+        AND p.fecha_envio IS NOT NULL
         AND (@agenciaId IS NULL OR p.agencia_id = @agenciaId);
 
       SELECT p.id, p.codigo, p.fecha_envio AS fechaEnvio, p.estado,
@@ -218,12 +211,120 @@ async function findForAccounting(startDate, endDate, agenciaId, page, pageSize) 
       FROM dbo.planillas AS p
       INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
       LEFT JOIN dbo.solicitudes_planilla AS sp ON sp.planilla_id = p.id
-      WHERE p.estado IN ('ENVIADA', 'RECIBIDA', 'PROCESADA')
-        AND p.fecha_envio >= @startDate
-        AND p.fecha_envio < @endDate
+      WHERE p.trasladado IS NULL
+        AND p.fecha_envio IS NOT NULL
         AND (@agenciaId IS NULL OR p.agencia_id = @agenciaId)
       GROUP BY p.id, p.codigo, p.fecha_envio, p.estado, p.numero_acta, a.id, a.nombre
-      ORDER BY p.fecha_envio DESC, p.id DESC
+      ORDER BY a.nombre, a.id, p.fecha_envio, p.id
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
+    `);
+
+  return {
+    total: Number(result.recordsets[0][0].total),
+    summary: result.recordsets[1][0],
+    planillas: result.recordsets[2],
+  };
+}
+
+async function decideAccountingTransfer(id, trasladado, usuarioId, fechaDecision) {
+  const pool = await getPool();
+  const result = await pool.request()
+    .input('id', sql.BigInt, id)
+    .input('trasladado', sql.Bit, trasladado)
+    .input('usuarioId', sql.Int, usuarioId)
+    .input('fechaDecision', sql.DateTime2(0), fechaDecision)
+    .query(`
+      DECLARE @decision TABLE (
+        id BIGINT,
+        trasladado BIT,
+        fechaDecisionTraslado DATETIME2(0),
+        decisionTrasladoUsuarioId INT
+      );
+
+      UPDATE dbo.planillas
+      SET trasladado = @trasladado,
+          fecha_decision_traslado = @fechaDecision,
+          decision_traslado_usuario_id = @usuarioId,
+          updated_at = @fechaDecision
+      OUTPUT inserted.id, inserted.trasladado, inserted.fecha_decision_traslado,
+             inserted.decision_traslado_usuario_id
+      INTO @decision
+      WHERE id = @id
+        AND fecha_envio IS NOT NULL
+        AND trasladado IS NULL;
+
+      SELECT id, trasladado, fechaDecisionTraslado,
+             decisionTrasladoUsuarioId
+      FROM @decision;
+
+      SELECT id, trasladado
+      FROM dbo.planillas
+      WHERE id = @id AND fecha_envio IS NOT NULL;
+    `);
+
+  return {
+    decision: result.recordsets[0][0] || null,
+    current: result.recordsets[1][0] || null,
+  };
+}
+
+async function findAccountingTransferHistory(startDate, endDate, agenciaId, trasladado, page, pageSize) {
+  const pool = await getPool();
+  const offset = (page - 1) * pageSize;
+  const result = await pool.request()
+    .input('startDate', sql.DateTime2(0), startDate)
+    .input('endDate', sql.DateTime2(0), endDate)
+    .input('agenciaId', sql.Int, agenciaId)
+    .input('trasladado', sql.Bit, trasladado)
+    .input('offset', sql.Int, offset)
+    .input('pageSize', sql.Int, pageSize)
+    .query(`
+      SELECT COUNT(*) AS total
+      FROM dbo.planillas AS p
+      WHERE p.trasladado IS NOT NULL
+        AND p.fecha_decision_traslado >= @startDate
+        AND p.fecha_decision_traslado < @endDate
+        AND (@agenciaId IS NULL OR p.agencia_id = @agenciaId)
+        AND (@trasladado IS NULL OR p.trasladado = @trasladado);
+
+      SELECT COUNT(DISTINCT p.id) AS cantidadPlanillas,
+             COUNT(sp.id) AS cantidadRegistros,
+             COUNT(DISTINCT CASE WHEN p.trasladado = 1 THEN p.id END) AS cantidadTrasladadas,
+             COUNT(DISTINCT CASE WHEN p.trasladado = 0 THEN p.id END) AS cantidadNoTrasladadas,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_aprobado), CONVERT(DECIMAL(18, 2), 0))) AS totalAprobado,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cancelado), CONVERT(DECIMAL(18, 2), 0))) AS totalCancelado,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.descuentos), CONVERT(DECIMAL(18, 2), 0))) AS totalDescuentos,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cheque), CONVERT(DECIMAL(18, 2), 0))) AS totalMontoCheque
+      FROM dbo.planillas AS p
+      LEFT JOIN dbo.solicitudes_planilla AS sp ON sp.planilla_id = p.id
+      WHERE p.trasladado IS NOT NULL
+        AND p.fecha_decision_traslado >= @startDate
+        AND p.fecha_decision_traslado < @endDate
+        AND (@agenciaId IS NULL OR p.agencia_id = @agenciaId)
+        AND (@trasladado IS NULL OR p.trasladado = @trasladado);
+
+      SELECT p.id, p.codigo, p.fecha_envio AS fechaEnvio, p.estado,
+             p.numero_acta AS numeroActa, p.trasladado,
+             p.fecha_decision_traslado AS fechaDecisionTraslado,
+             a.id AS agenciaId, a.nombre AS agenciaNombre,
+             du.nombre AS decisionTrasladoUsuario,
+             COUNT(sp.id) AS cantidadRegistros,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_aprobado), CONVERT(DECIMAL(18, 2), 0))) AS totalAprobado,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cancelado), CONVERT(DECIMAL(18, 2), 0))) AS totalCancelado,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.descuentos), CONVERT(DECIMAL(18, 2), 0))) AS totalDescuentos,
+             CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cheque), CONVERT(DECIMAL(18, 2), 0))) AS totalMontoCheque
+      FROM dbo.planillas AS p
+      INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
+      INNER JOIN dbo.usuarios AS du ON du.id = p.decision_traslado_usuario_id
+      LEFT JOIN dbo.solicitudes_planilla AS sp ON sp.planilla_id = p.id
+      WHERE p.trasladado IS NOT NULL
+        AND p.fecha_decision_traslado >= @startDate
+        AND p.fecha_decision_traslado < @endDate
+        AND (@agenciaId IS NULL OR p.agencia_id = @agenciaId)
+        AND (@trasladado IS NULL OR p.trasladado = @trasladado)
+      GROUP BY p.id, p.codigo, p.fecha_envio, p.estado, p.numero_acta, p.trasladado,
+               p.fecha_decision_traslado, a.id, a.nombre, du.nombre
+      ORDER BY p.fecha_decision_traslado DESC, p.id DESC
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;
     `);
 
@@ -241,7 +342,10 @@ async function findAccountingDetail(id) {
     .query(`
       SELECT p.id, p.codigo, p.fecha_creacion AS fechaCreacion, p.fecha_envio AS fechaEnvio,
              p.estado, p.numero_acta AS numeroActa, a.id AS agenciaId, a.nombre AS agenciaNombre,
-             u.id AS usuarioId, u.nombre AS creadaPor,
+             u.id AS usuarioId, u.nombre AS creadaPor, p.trasladado,
+             p.fecha_decision_traslado AS fechaDecisionTraslado,
+             p.decision_traslado_usuario_id AS decisionTrasladoUsuarioId,
+             du.nombre AS decisionTrasladoUsuario,
              COUNT(sp.id) AS cantidadRegistros,
              CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_aprobado), CONVERT(DECIMAL(18, 2), 0))) AS totalAprobado,
              CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cancelado), CONVERT(DECIMAL(18, 2), 0))) AS totalCancelado,
@@ -250,10 +354,12 @@ async function findAccountingDetail(id) {
       FROM dbo.planillas AS p
       INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
       INNER JOIN dbo.usuarios AS u ON u.id = p.creada_por_usuario_id
+      LEFT JOIN dbo.usuarios AS du ON du.id = p.decision_traslado_usuario_id
       LEFT JOIN dbo.solicitudes_planilla AS sp ON sp.planilla_id = p.id
       WHERE p.id = @id AND p.estado IN ('ENVIADA', 'RECIBIDA', 'PROCESADA')
       GROUP BY p.id, p.codigo, p.fecha_creacion, p.fecha_envio, p.estado,
-               p.numero_acta, a.id, a.nombre, u.id, u.nombre;
+               p.numero_acta, a.id, a.nombre, u.id, u.nombre, p.trasladado,
+               p.fecha_decision_traslado, p.decision_traslado_usuario_id, du.nombre;
 
       SELECT sp.id, sp.numero_solicitud AS numeroSolicitud, sp.miembro_id AS miembroId,
              sp.nombre_cliente AS nombreCliente,
@@ -302,7 +408,9 @@ module.exports = {
   createWithSolicitudes,
   findSentByAgencyAndDate,
   findDetailForAgency,
-  findForAccounting,
+  findPendingForAccounting,
+  decideAccountingTransfer,
+  findAccountingTransferHistory,
   findAccountingDetail,
   findSolicitudUsage,
 };

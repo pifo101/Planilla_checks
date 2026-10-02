@@ -1,7 +1,13 @@
 const planillaService = require('../services/planilla.service');
 
-function renderAccountingError(error, res) {
+function renderAccountingError(error, req, res) {
   if (error instanceof planillaService.PlanillaError) {
+    if (typeof req.is === 'function' && req.is('application/json')) {
+      return res.status(error.status).json({
+        success: false,
+        error: { code: error.code, message: error.message },
+      });
+    }
     const errorView = error.status === 403 || error.status >= 500 ? '500' : '404';
     return res.status(error.status).render(errorView, {
       pageTitle: error.status === 403 ? 'Acceso denegado' : 'Consulta no valida',
@@ -21,11 +27,11 @@ async function listReceivedPlanillas(req, res) {
     const history = await planillaService.listAccountingPlanillas(req.session.user, req.query);
     res.set('Cache-Control', 'no-store');
     return res.render('accounting/received-planillas', {
-      pageTitle: 'Planillas recibidas',
+      pageTitle: 'Pendientes de traslado',
       ...history,
     });
   } catch (error) {
-    return renderAccountingError(error, res);
+    return renderAccountingError(error, req, res);
   }
 }
 
@@ -45,11 +51,43 @@ async function showReceivedPlanilla(req, res) {
       planilla,
     });
   } catch (error) {
-    return renderAccountingError(error, res);
+    return renderAccountingError(error, req, res);
+  }
+}
+
+async function decideTransfer(req, res) {
+  try {
+    const decision = await planillaService.decideAccountingTransfer(
+      req.session.user,
+      req.params.id,
+      req.body,
+    );
+    res.set('Cache-Control', 'no-store');
+    if (typeof req.is === 'function' && req.is('application/json')) {
+      return res.json({ success: true, data: { decision } });
+    }
+    return res.redirect(303, '/contabilidad/planillas');
+  } catch (error) {
+    return renderAccountingError(error, req, res);
+  }
+}
+
+async function listTransferHistory(req, res) {
+  try {
+    const history = await planillaService.listAccountingTransferHistory(req.session.user, req.query);
+    res.set('Cache-Control', 'no-store');
+    return res.render('accounting/transfer-history', {
+      pageTitle: 'Historial de traslados',
+      ...history,
+    });
+  } catch (error) {
+    return renderAccountingError(error, req, res);
   }
 }
 
 module.exports = {
+  decideTransfer,
   listReceivedPlanillas,
+  listTransferHistory,
   showReceivedPlanilla,
 };

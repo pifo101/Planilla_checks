@@ -37,7 +37,7 @@ El navegador nunca llama directamente al servidor externo. Consultar no crea pla
 - El borrador se pierde al recargar la pagina mientras no se haya enviado.
 - `Enviar planilla` usa `POST /api/planillas`. El servidor valida el contenido y persiste la planilla con todas sus solicitudes dentro de una transaccion.
 - Si el envio falla, el borrador se conserva. Si se confirma, queda vacio y la planilla queda en estado `ENVIADA`.
-- El historial real y el flujo de Contabilidad permanecen pendientes.
+- El historial del asistente y el flujo final de decision por planilla de Contabilidad usan exclusivamente snapshots persistidos; no vuelven a consultar este Web Service.
 
 La disponibilidad se consulta con `GET /api/solicitudes/:numeroSolicitud/disponibilidad?numeroCheque=...`. Este endpoint protegido solo ejecuta una consulta parametrizada sobre `solicitudes_planilla`.
 

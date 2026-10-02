@@ -12,6 +12,7 @@ Agencia
            +--- SolicitudPlanilla
 
 Usuario --- crea Planilla
+Usuario --- decide traslado de Planilla
 Usuario --- crea ActaDiaria (una por fecha global)
 ```
 
@@ -19,6 +20,7 @@ Usuario --- crea ActaDiaria (una por fecha global)
 - `usuarios.agencia_id` referencia `agencias.id`, es obligatorio para `ASISTENTE` y debe ser `NULL` para `ADMIN` y `CONTABILIDAD`.
 - `planillas.agencia_id` referencia `agencias.id`.
 - `planillas.creada_por_usuario_id` referencia `usuarios.id`.
+- `planillas.decision_traslado_usuario_id` referencia `usuarios.id` cuando existe una decision.
 - `solicitudes_planilla.planilla_id` referencia `planillas.id`.
 - `actas_diarias.creada_por_usuario_id` referencia `usuarios.id`.
 
@@ -33,6 +35,13 @@ Usuario --- crea ActaDiaria (una por fecha global)
 - `CK_usuarios_rol_agencia` mantiene consistente la relacion rol/agencia. La aplicacion valida ademas que una agencia asignada a un asistente este activa.
 - Una solicitud marcada como procesada no puede modificarse ni eliminarse. El trigger permite el cambio inicial a procesada y bloquea cambios posteriores.
 - Una planilla que ya salio de borrador no puede eliminarse y debe tener fecha de envio.
+- `CK_planillas_decision_traslado` impide decisiones parciales: los tres campos de decision son todos `NULL` o todos no nulos.
+
+## Decision de traslado
+
+`planillas.trasladado BIT NULL` modela una decision independiente de `planillas.estado`: `NULL` es pendiente, `1` es trasladada y `0` es no trasladada. `fecha_decision_traslado DATETIME2(0)` y `decision_traslado_usuario_id` registran el instante y usuario de Contabilidad. Las filas historicas permanecen pendientes porque no existe evidencia para inventar una decision.
+
+La decision corresponde a la planilla completa. No actualiza `solicitudes_planilla.estado`, `procesado` ni `fecha_procesado`. Tampoco representa aprobacion o rechazo crediticio. Los estados legados `RECIBIDA` y `PROCESADA` permanecen permitidos, pero no se interpretan como traslado.
 
 ## Acta
 
@@ -46,6 +55,8 @@ El numero se captura manualmente, se recorta y admite de 1 a 50 caracteres sin c
 - `IX_planillas_fecha_agencia` apoya consultas por fecha y agencia.
 - `IX_planillas_agencia_estado` apoya historial y filtros por agencia/estado.
 - `IX_solicitudes_planilla_estado` apoya el detalle y procesamiento de solicitudes de una planilla.
+- `IX_planillas_traslado_pendiente` apoya la bandeja por decision, agencia y fecha de envio.
+- `IX_planillas_historial_traslado` apoya historial por fecha de decision, agencia y resultado.
 - Las restricciones UNIQUE crean indices para codigo, correo, identidad solicitud/miembro y numero de cheque.
 
 ## Persistencia Node
@@ -56,7 +67,7 @@ El numero se captura manualmente, se recorta y admite de 1 a 50 caracteres sin c
 
 El historial del asistente consulta unicamente planillas enviadas de la agencia presente en la sesion revalidada. El listado usa el rango UTC correspondiente al dia calendario de `America/Guatemala`, pagina 20 filas y obtiene de SQL `COUNT` y `SUM` con `COALESCE` sobre `solicitudes_planilla`. El listado y detalle leen `planillas.numero_acta`, nunca el acta actualmente vigente. El detalle exige simultaneamente el ID de planilla y la agencia autorizada; una planilla ajena se comporta como inexistente.
 
-Contabilidad usa contratos separados para no debilitar el aislamiento del asistente. `findForAccounting` consulta los estados oficiales `ENVIADA`, `RECIBIDA` y `PROCESADA`, filtra por un rango parametrizado de `fecha_envio` y por una agencia opcional validada, agrega cada fila de `solicitudes_planilla` y pagina 20 planillas con `OFFSET/FETCH`. Un agregado separado en la misma consulta devuelve totales del conjunto filtrado, no solo de la pagina visible. `findAccountingDetail` admite cualquier agencia para un usuario `CONTABILIDAD` y devuelve los valores financieros, miembro tecnico, estado y datos de procesamiento persistidos.
+Contabilidad usa contratos separados para no debilitar el aislamiento del asistente. `findPendingForAccounting` consulta `trasladado IS NULL` sin rango de fecha, agrega solicitudes y pagina 20 planillas ordenadas por agencia. `decideAccountingTransfer` usa un unico `UPDATE ... WHERE id = @id AND trasladado IS NULL`; las filas afectadas determinan al ganador concurrente. `findAccountingTransferHistory` consulta decisiones por rango de `fecha_decision_traslado`, agencia y resultado. `findAccountingDetail` devuelve ademas la auditoria, sin mutar datos.
 
 El selector de agencias de Contabilidad procede de `dbo.agencias`: incluye agencias activas y tambien inactivas que tengan planillas historicas en un estado no borrador. Los importes se agregan como `DECIMAL(18,2)` en SQL y se devuelven como texto decimal para no introducir aritmetica de punto flotante en Node.
 
@@ -70,12 +81,14 @@ El selector de agencias de Contabilidad procede de `dbo.agencias`: incluye agenc
 
 `database/006_user_role_agency_constraint.sql` normaliza a `NULL` las agencias antiguas de `ADMIN`/`CONTABILIDAD` y agrega incrementalmente `CK_usuarios_rol_agencia`. No elimina usuarios ni modifica planillas.
 
+`database/007_accounting_transfer_decision.sql` agrega las tres columnas de decision, FK, CHECK e indices de bandeja e historial. Es incremental, conserva las planillas existentes con `trasladado = NULL` y no cambia estados tecnicos.
+
 Las reglas confirmadas de asociacion no requieren cambios de esquema: los montos resultantes ya se almacenan por fila de emision y el constraint compuesto sigue evitando duplicar la misma emision tecnica dentro de una solicitud.
 
-El borrador del navegador no es persistencia. Los historiales del asistente y de Contabilidad usan SQL Server y son de solo lectura. Consultar desde Contabilidad no ejecuta `UPDATE` ni representa una recepcion de dominio. Las transiciones de recepcion y procesamiento continuan pendientes.
+El borrador del navegador no es persistencia. El historial del asistente no cambia. Los GET de Contabilidad son de solo lectura; la unica mutacion es la decision explicita de traslado. La correccion posterior de una decision equivocada esta pendiente de definicion funcional.
 
-`DB_DATABASE` es obligatorio. `001_create_database.sql` es un bootstrap opcional y crea unicamente la base inicial predeterminada `PlanillaChecksDB`; una base con otro nombre debe existir previamente. Los scripts `002` a `006` no contienen `USE`: deben ejecutarse con `sqlcmd -d "NombreBase"` y operan exclusivamente sobre esa conexion seleccionada. La verificacion integral compara `DB_NAME()` con `DB_DATABASE` antes de crear datos temporales.
+`DB_DATABASE` es obligatorio. `001_create_database.sql` es un bootstrap opcional y crea unicamente la base inicial predeterminada `PlanillaChecksDB`; una base con otro nombre debe existir previamente. Los scripts `002` a `007` no contienen `USE`: deben ejecutarse con `sqlcmd -d "NombreBase"` y operan exclusivamente sobre esa conexion seleccionada. La verificacion integral compara `DB_NAME()` con `DB_DATABASE` antes de crear datos temporales.
 
-Las pruebas de integracion exigen una base separada mediante `TEST_DB_DATABASE`. El nombre debe terminar en `TestDB`, ser distinto de `DB_DATABASE` y existir previamente. La suite no crea ni elimina bases. La configuracion TLS definitiva de SQL Server depende de la infraestructura de despliegue; el entorno actual usa SQL Server Express local.
+Las pruebas de integracion exigen `TEST_DB_DATABASE=PlanillaChecksTestDB`, distinta de `DB_DATABASE` y existente previamente. La suite no crea ni elimina bases. La configuracion TLS definitiva de SQL Server depende de la infraestructura de despliegue; el entorno actual usa SQL Server Express local.
 
 Las sesiones HTTP siguen almacenandose en memoria por ahora. No contienen hashes ni contrasenas y solo guardan identidad, rol y agencia. Antes de desplegar varias instancias de la aplicacion debe configurarse un almacen de sesiones compartido.

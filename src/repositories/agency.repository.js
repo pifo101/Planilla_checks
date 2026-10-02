@@ -19,10 +19,10 @@ async function findAvailableForAccounting() {
     FROM dbo.agencias AS a
     WHERE a.activo = 1
        OR EXISTS (
-         SELECT 1
-         FROM dbo.planillas AS p
-         WHERE p.agencia_id = a.id
-           AND p.estado IN ('ENVIADA', 'RECIBIDA', 'PROCESADA')
+          SELECT 1
+          FROM dbo.planillas AS p
+          WHERE p.agencia_id = a.id
+            AND p.fecha_envio IS NOT NULL
        )
     ORDER BY a.nombre;
   `);
