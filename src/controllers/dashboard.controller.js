@@ -13,6 +13,7 @@ async function showDashboard(req, res) {
     return res.status(500).render('500', {
       pageTitle: 'Error del servidor',
       errorMessage: 'No fue posible consultar el resumen administrativo en este momento.',
+      errorCode: 500,
     });
   }
 }

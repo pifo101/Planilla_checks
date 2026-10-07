@@ -1,9 +1,24 @@
 const sidebarToggle = document.querySelector('[data-sidebar-toggle]');
+const sidebar = document.querySelector('.app-sidebar');
+const mobileSidebar = window.matchMedia('(max-width: 991.98px)');
 
-if (sidebarToggle) {
+function setSidebarOpen(open, { restoreFocus = false } = {}) {
+  if (!sidebarToggle || !sidebar) return;
+  const shouldOpen = mobileSidebar.matches && open;
+  if (!shouldOpen && (restoreFocus || sidebar.contains(document.activeElement))) sidebarToggle.focus();
+  document.body.classList.toggle('sidebar-open', shouldOpen);
+  sidebarToggle.setAttribute('aria-expanded', String(shouldOpen));
+  sidebar.inert = mobileSidebar.matches && !shouldOpen;
+  sidebar.setAttribute('aria-hidden', String(mobileSidebar.matches && !shouldOpen));
+  sidebarToggle.setAttribute('aria-label', shouldOpen ? 'Cerrar menu' : 'Abrir menu');
+}
+
+if (sidebarToggle && sidebar) {
+  setSidebarOpen(false);
   sidebarToggle.addEventListener('click', () => {
-    document.body.classList.toggle('sidebar-open');
+    setSidebarOpen(!document.body.classList.contains('sidebar-open'));
   });
+  mobileSidebar.addEventListener('change', () => setSidebarOpen(false));
 }
 
 document.addEventListener('click', (event) => {
@@ -12,8 +27,38 @@ document.addEventListener('click', (event) => {
     && !event.target.closest('.app-sidebar')
     && !event.target.closest('[data-sidebar-toggle]')
   ) {
-    document.body.classList.remove('sidebar-open');
+    setSidebarOpen(false);
   }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && document.body.classList.contains('sidebar-open')) {
+    setSidebarOpen(false, { restoreFocus: true });
+  }
+});
+
+document.querySelectorAll('[data-transfer-form]').forEach((form) => {
+  form.addEventListener('submit', (event) => {
+    const row = form.closest('[data-transfer-row]');
+    if (!row || row.dataset.transferPending === 'true') {
+      event.preventDefault();
+      return;
+    }
+    if (!window.confirm(form.dataset.confirm)) {
+      event.preventDefault();
+      return;
+    }
+
+    row.dataset.transferPending = 'true';
+    row.querySelectorAll('[data-transfer-actions] button').forEach((button) => {
+      button.disabled = true;
+    });
+    const submittedButton = event.submitter;
+    if (submittedButton) {
+      submittedButton.textContent = 'Procesando...';
+      submittedButton.setAttribute('aria-busy', 'true');
+    }
+  });
 });
 
 const solicitudForm = document.querySelector('[data-solicitud-form]');
@@ -39,13 +84,19 @@ if (solicitudForm) {
   const actaFeedback = actaSection.querySelector('[data-acta-feedback]');
   const saveActaButton = actaSection.querySelector('[data-save-acta]');
   const currency = new Intl.NumberFormat('es-GT', { style: 'currency', currency: 'GTQ' });
+  const operationalDateTime = new Intl.DateTimeFormat('es-GT', {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+    timeZone: 'America/Guatemala',
+  });
+  const csrfToken = document.querySelector('[data-csrf-token]')?.dataset.csrfToken || '';
   let actaAvailable = actaSection.dataset.actaAvailable === 'true';
   let currentRequest = null;
   let checkingAvailability = false;
   let sendingPlanilla = false;
   const distributionRequests = createRequestGuard();
   const availabilityRequests = createRequestGuard();
-  const planillaSubmitter = createPlanillaSubmitter(fetch);
+  const planillaSubmitter = createPlanillaSubmitter(fetch, csrfToken);
   const draftRequests = [];
 
   function showFeedback(message, tone) {
@@ -71,6 +122,17 @@ if (solicitudForm) {
     renderDraft();
   }
 
+  function renderUnconfirmedActa(message) {
+    actaAvailable = false;
+    actaSection.dataset.actaAvailable = 'false';
+    actaCurrent.value = '';
+    actaCurrent.classList.add('d-none');
+    actaForm.classList.remove('d-none');
+    actaHelp.textContent = 'No fue posible confirmar el acta vigente. Intenta guardarla nuevamente para validar el estado actual.';
+    showActaFeedback(message, 'danger');
+    renderDraft();
+  }
+
   async function refreshDailyActa(message) {
     try {
       const response = await fetch('/api/acta-diaria', { headers: { accept: 'application/json' } });
@@ -78,10 +140,14 @@ if (solicitudForm) {
       if (!response.ok || !payload?.success) throw new Error(payload?.error?.message);
       renderActa(payload.data.fecha, payload.data.acta, message);
     } catch (error) {
-      showActaFeedback(error.message || 'No fue posible actualizar el acta del dia.', 'danger');
-      actaAvailable = false;
-      renderDraft();
+      renderUnconfirmedActa(error.message || 'No fue posible actualizar el acta del dia.');
     }
+  }
+
+  function formatOperationalDateTime(value) {
+    if (!value) return 'No disponible';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'No disponible' : operationalDateTime.format(date);
   }
 
   function setData(data) {
@@ -90,7 +156,7 @@ if (solicitudForm) {
     solicitudForm.elements.montoCancelado.value = currency.format(data.montoCancelado);
     solicitudForm.elements.descuentos.value = currency.format(data.descuentos);
     solicitudForm.elements.montoCheque.value = currency.format(data.montoCheque);
-    solicitudForm.elements.fechaHora.value = new Date(data.fechaExtraccion).toLocaleString('es-GT');
+    solicitudForm.elements.fechaHora.value = formatOperationalDateTime(data.fechaExtraccion);
     solicitudForm.elements.metodologia.value = data.metodologia || '';
     solicitudForm.elements.agencia.value = data.agencia || 'Sin agencia asignada';
   }
@@ -105,12 +171,6 @@ if (solicitudForm) {
 
   function formatCents(cents) {
     return currency.format(cents / 100);
-  }
-
-  function escapeHtml(value) {
-    const element = document.createElement('div');
-    element.textContent = String(value ?? '');
-    return element.innerHTML;
   }
 
   function validCheckNumber(value) {
@@ -146,35 +206,75 @@ if (solicitudForm) {
     groupedSection.classList.remove('d-none');
     groupedSection.querySelector('[data-group-request-number]').textContent = requestNumber;
     groupedSection.querySelector('[data-group-count]').textContent = `${data.miembros.length} miembros`;
-    groupedMembers.innerHTML = data.miembros.map((miembro, index) => {
+    const memberCards = data.miembros.map((miembro, index) => {
       const amount = (value) => miembro.calculado ? currency.format(value) : 'No confirmado';
-      const disabled = miembro.calculado ? '' : 'disabled';
-      return `
-        <section class="card mb-3" data-group-member="${escapeHtml(miembro.miembroId)}">
-          <div class="card-header bg-white p-4 pb-0 border-0 d-flex justify-content-between align-items-center">
-            <h3 class="h5 mb-0">Informacion de la solicitud</h3>
-            <span class="badge ${miembro.calculado ? 'text-bg-success' : 'text-bg-warning'}">Miembro ${index + 1} de ${data.miembros.length}</span>
-          </div>
-          <div class="card-body p-4">
-            <div class="row g-3">
-              <div class="col-md-6"><label class="form-label">Cliente</label><input class="form-control readonly-field" value="${escapeHtml(miembro.cliente || '')}" readonly></div>
-              <div class="col-md-3"><label class="form-label">Monto aprobado</label><input class="form-control readonly-field" value="${escapeHtml(amount(miembro.montoAprobado))}" readonly></div>
-              <div class="col-md-3"><label class="form-label">Monto cancelado</label><input class="form-control readonly-field" value="${escapeHtml(amount(miembro.montoCancelado))}" readonly></div>
-              <div class="col-md-3"><label class="form-label">Descuentos</label><input class="form-control readonly-field" value="${escapeHtml(amount(miembro.descuentos))}" readonly></div>
-              <div class="col-md-3"><label class="form-label">Monto cheque</label><input class="form-control readonly-field" value="${escapeHtml(amount(miembro.montoCheque))}" readonly></div>
-              <div class="col-md-3"><label class="form-label">Fecha y hora</label><input class="form-control readonly-field" value="${escapeHtml(new Date(data.fechaExtraccion).toLocaleString('es-GT'))}" readonly></div>
-              <div class="col-md-3"><label class="form-label">Metodologia</label><input class="form-control readonly-field" value="GRUPAL" readonly></div>
-              <div class="col-md-6"><label class="form-label">Agencia</label><input class="form-control readonly-field" value="${escapeHtml(data.agencia || 'Sin agencia asignada')}" readonly></div>
-              <div class="col-md-6"><label class="form-label fw-semibold" for="numeroCheque-${index}">Numero de cheque</label><input class="form-control" id="numeroCheque-${index}" data-member-check data-member-index="${index}" type="text" placeholder="Ingresa el numero de cheque" pattern="(?:[A-Za-z0-9]|-){1,50}" maxlength="50" autocomplete="off" ${disabled}></div>
-            </div>
-            <div class="form-text mt-3">Estado: ${miembro.calculado ? 'calculo financiero confirmado' : 'calculo financiero no confirmado'}.</div>
-          </div>
-        </section>`;
-    }).join('');
+      const card = document.createElement('section');
+      card.className = 'card mb-3';
+      card.dataset.groupMember = String(miembro.miembroId ?? '');
+
+      const header = document.createElement('div');
+      header.className = 'card-header bg-white p-4 pb-0 border-0 d-flex flex-wrap justify-content-between align-items-center gap-2';
+      const heading = document.createElement('h3');
+      heading.className = 'h5 mb-0';
+      heading.textContent = 'Informacion de la solicitud';
+      const badge = document.createElement('span');
+      badge.className = `badge ${miembro.calculado ? 'text-bg-success' : 'text-bg-warning'}`;
+      badge.textContent = `Miembro ${index + 1} de ${data.miembros.length}`;
+      header.append(heading, badge);
+
+      const cardBody = document.createElement('div');
+      cardBody.className = 'card-body p-4';
+      const row = document.createElement('div');
+      row.className = 'row g-3';
+      const appendField = (columnClass, suffix, labelText, value, { editable = false } = {}) => {
+        const column = document.createElement('div');
+        column.className = columnClass;
+        const inputId = `grupo-${index}-${suffix}`;
+        const label = document.createElement('label');
+        label.className = `form-label${editable ? ' fw-semibold' : ''}`;
+        label.htmlFor = inputId;
+        label.textContent = labelText;
+        const input = document.createElement('input');
+        input.className = editable ? 'form-control' : 'form-control readonly-field';
+        input.id = inputId;
+        input.type = 'text';
+        input.value = String(value ?? '');
+        input.readOnly = !editable;
+        if (editable) {
+          input.dataset.memberCheck = '';
+          input.dataset.memberIndex = String(index);
+          input.placeholder = 'Ingresa el numero de cheque';
+          input.pattern = '(?:[A-Za-z0-9]|-){1,50}';
+          input.maxLength = 50;
+          input.autocomplete = 'off';
+          input.disabled = !miembro.calculado;
+        }
+        column.append(label, input);
+        row.append(column);
+      };
+
+      appendField('col-md-6', 'cliente', 'Cliente', miembro.cliente || 'No disponible');
+      appendField('col-md-3', 'monto-aprobado', 'Monto aprobado', amount(miembro.montoAprobado));
+      appendField('col-md-3', 'monto-cancelado', 'Monto cancelado', amount(miembro.montoCancelado));
+      appendField('col-md-3', 'descuentos', 'Descuentos', amount(miembro.descuentos));
+      appendField('col-md-3', 'monto-cheque', 'Monto cheque', amount(miembro.montoCheque));
+      appendField('col-md-3', 'fecha-hora', 'Fecha y hora', formatOperationalDateTime(data.fechaExtraccion));
+      appendField('col-md-3', 'metodologia', 'Metodologia', 'GRUPAL');
+      appendField('col-md-6', 'agencia', 'Agencia', data.agencia || 'No disponible');
+      appendField('col-md-6', 'numero-cheque', 'Numero de cheque', '', { editable: true });
+
+      const status = document.createElement('div');
+      status.className = 'form-text mt-3';
+      status.textContent = `Estado: ${miembro.calculado ? 'calculo financiero confirmado' : 'calculo financiero no confirmado'}.`;
+      cardBody.append(row, status);
+      card.append(header, cardBody);
+      return card;
+    });
+    groupedMembers.replaceChildren(...memberCards);
   }
 
   function clearGroupedRequest() {
-    groupedMembers.innerHTML = '';
+    groupedMembers.replaceChildren();
     groupedSection.classList.add('d-none');
     individualSection.classList.remove('d-none');
   }
@@ -197,20 +297,41 @@ if (solicitudForm) {
     if (draftRequests.length === 0) {
       draftBody.innerHTML = '<tr><td class="text-center text-muted py-4" colspan="10">No hay solicitudes agregadas.</td></tr>';
     } else {
-      draftBody.innerHTML = draftRequests.map((item, index) => `
-        <tr>
-          <td>${escapeHtml(item.numeroSolicitud)}</td>
-          <td>${escapeHtml(item.cliente)}</td>
-          <td>${formatCents(item.montoAprobado)}</td>
-          <td>${formatCents(item.montoCancelado)}</td>
-          <td>${formatCents(item.descuentos)}</td>
-          <td>${formatCents(item.montoCheque)}</td>
-          <td>${escapeHtml(item.numeroCheque)}</td>
-          <td>${escapeHtml(item.metodologia)}</td>
-          <td>${new Date(item.fechaExtraccion).toLocaleString('es-GT')}</td>
-          <td><button class="btn btn-sm btn-outline-danger" type="button" data-remove-draft="${index}" aria-label="Eliminar solicitud ${escapeHtml(item.numeroSolicitud)}" ${sendingPlanilla ? 'disabled' : ''}><i class="bi bi-trash"></i><span class="ms-1">Eliminar</span></button></td>
-        </tr>
-      `).join('');
+      const rows = draftRequests.map((item, index) => {
+        const row = document.createElement('tr');
+        [
+          item.numeroSolicitud,
+          item.cliente,
+          formatCents(item.montoAprobado),
+          formatCents(item.montoCancelado),
+          formatCents(item.descuentos),
+          formatCents(item.montoCheque),
+          item.numeroCheque,
+          item.metodologia,
+          formatOperationalDateTime(item.fechaExtraccion),
+        ].forEach((value) => {
+          const cell = document.createElement('td');
+          cell.textContent = String(value ?? '');
+          row.append(cell);
+        });
+        const actionCell = document.createElement('td');
+        const removeButton = document.createElement('button');
+        removeButton.className = 'btn btn-sm btn-outline-danger';
+        removeButton.type = 'button';
+        removeButton.dataset.removeDraft = String(index);
+        removeButton.setAttribute('aria-label', `Eliminar solicitud ${item.numeroSolicitud}`);
+        removeButton.disabled = sendingPlanilla;
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-trash';
+        const label = document.createElement('span');
+        label.className = 'ms-1';
+        label.textContent = 'Eliminar';
+        removeButton.append(icon, label);
+        actionCell.append(removeButton);
+        row.append(actionCell);
+        return row;
+      });
+      draftBody.replaceChildren(...rows);
     }
 
     const totals = draftRequests.reduce((sum, item) => ({
@@ -242,7 +363,7 @@ if (solicitudForm) {
     });
   }
 
-  loadButton.addEventListener('click', async () => {
+  async function fetchDistribution() {
     const requestNumber = solicitudForm.elements.numeroSolicitud.value.trim();
 
     if (!/^\d{1,30}$/.test(requestNumber)) {
@@ -272,8 +393,8 @@ if (solicitudForm) {
         if (payload?.data?.miembros?.length) {
           renderGroupedRequest({
             ...payload.data,
-            fechaExtraccion: new Date().toISOString(),
-            agencia: '',
+            fechaExtraccion: null,
+            agencia: null,
           }, requestNumber);
         }
         if (payload?.data?.metodologia) {
@@ -321,6 +442,12 @@ if (solicitudForm) {
         loadButton.innerHTML = '<i class="bi bi-search me-2"></i>Obtener datos';
       }
     }
+  }
+
+  solicitudForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const requestInput = solicitudForm.elements.numeroSolicitud;
+    if (event.submitter === loadButton || document.activeElement === requestInput) fetchDistribution();
   });
 
   solicitudForm.elements.numeroCheque.addEventListener('input', () => {
@@ -490,7 +617,7 @@ if (solicitudForm) {
     try {
       const response = await fetch('/api/acta-diaria', {
         method: 'POST',
-        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        headers: { accept: 'application/json', 'content-type': 'application/json', 'x-csrf-token': csrfToken },
         body: JSON.stringify({ numeroActa }),
       });
       const payload = await response.json().catch(() => null);

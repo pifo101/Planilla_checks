@@ -1,17 +1,17 @@
 <%
   const navigationRole = currentUser ? currentUser.rol : null;
-  const showDemoNavigation = !currentUser;
-  // Frontend visibility only. Backend authorization must remain authoritative when enabled.
+  const accountingHistoryDetail = currentPath.startsWith('/contabilidad/planillas/')
+    && typeof returnTo === 'string' && returnTo.startsWith('/contabilidad/historial');
 %>
-<aside class="app-sidebar">
+<aside class="app-sidebar" id="app-sidebar">
   <nav aria-label="Navegacion principal">
-    <% if (showDemoNavigation || navigationRole === 'ADMIN') { %>
+    <% if (navigationRole === 'ADMIN') { %>
       <a class="sidebar-link <%= currentPath === '/dashboard' ? 'active' : '' %>" href="/dashboard" <%- currentPath === '/dashboard' ? 'aria-current="page"' : '' %>>
         <i class="bi bi-grid-1x2"></i><span>Dashboard</span>
       </a>
     <% } %>
 
-    <% if (showDemoNavigation || navigationRole === 'ASISTENTE') { %>
+    <% if (navigationRole === 'ASISTENTE') { %>
       <div class="sidebar-label">ASISTENTE DE AGENCIA</div>
       <a class="sidebar-link <%= currentPath === '/asistente/nueva-planilla' ? 'active' : '' %>" href="/asistente/nueva-planilla" <%- currentPath === '/asistente/nueva-planilla' ? 'aria-current="page"' : '' %>>
         <i class="bi bi-file-earmark-plus"></i><span>Nueva planilla</span>
@@ -21,17 +21,17 @@
       </a>
     <% } %>
 
-    <% if (showDemoNavigation || navigationRole === 'CONTABILIDAD') { %>
+    <% if (navigationRole === 'CONTABILIDAD') { %>
       <div class="sidebar-label">CONTABILIDAD</div>
-      <a class="sidebar-link <%= currentPath.startsWith('/contabilidad/planillas') ? 'active' : '' %>" href="/contabilidad/planillas" <%- currentPath.startsWith('/contabilidad/planillas') ? 'aria-current="page"' : '' %>>
+      <a class="sidebar-link <%= currentPath.startsWith('/contabilidad/planillas') && !accountingHistoryDetail ? 'active' : '' %>" href="/contabilidad/planillas" <%- currentPath.startsWith('/contabilidad/planillas') && !accountingHistoryDetail ? 'aria-current="page"' : '' %>>
         <i class="bi bi-inbox"></i><span>Pendientes de traslado</span>
       </a>
-      <a class="sidebar-link <%= currentPath.startsWith('/contabilidad/historial') ? 'active' : '' %>" href="/contabilidad/historial" <%- currentPath.startsWith('/contabilidad/historial') ? 'aria-current="page"' : '' %>>
+      <a class="sidebar-link <%= currentPath.startsWith('/contabilidad/historial') || accountingHistoryDetail ? 'active' : '' %>" href="/contabilidad/historial" <%- currentPath.startsWith('/contabilidad/historial') || accountingHistoryDetail ? 'aria-current="page"' : '' %>>
         <i class="bi bi-clock-history"></i><span>Historial de traslados</span>
       </a>
     <% } %>
 
-    <% if (showDemoNavigation || navigationRole === 'ADMIN') { %>
+    <% if (navigationRole === 'ADMIN') { %>
       <div class="sidebar-label">ADMINISTRACION</div>
       <a class="sidebar-link <%= currentPath.startsWith('/admin/usuarios') ? 'active' : '' %>" href="/admin/usuarios" <%- currentPath.startsWith('/admin/usuarios') ? 'aria-current="page"' : '' %>>
         <i class="bi bi-people"></i><span>Usuarios</span>

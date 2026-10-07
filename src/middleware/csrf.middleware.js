@@ -9,9 +9,10 @@ function provideCsrfToken(req, res, next) {
 function requireCsrf(req, res, next) {
   const expected = req.session.csrfToken;
   const received = req.get('x-csrf-token') || req.body?._csrf;
-  const valid = typeof expected === 'string' && typeof received === 'string'
-    && expected.length === received.length
-    && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(received));
+  const expectedBuffer = Buffer.from(typeof expected === 'string' ? expected : '');
+  const receivedBuffer = Buffer.from(typeof received === 'string' ? received : '');
+  const valid = expectedBuffer.length > 0 && expectedBuffer.length === receivedBuffer.length
+    && crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
   if (valid) return next();
 
   if (req.is('application/json')) {

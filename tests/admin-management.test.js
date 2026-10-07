@@ -106,7 +106,7 @@ test('maneja carrera de UNIQUE sin exponer SQL', async () => {
   userRepository.create = async () => { const error = new Error('UQ_usuarios_email'); error.number = 2627; throw error; };
   await assert.rejects(
     adminService.createUser(validPayload(), actor),
-    (error) => error.code === 'DUPLICATE_EMAIL' && error.message === 'Ya existe un usuario con ese correo.',
+    (error) => error.code === 'DUPLICATE_EMAIL' && error.message === 'Ya existe una cuenta con este correo.',
   );
 });
 
@@ -229,14 +229,18 @@ test('consulta administrativa no selecciona password_hash', () => {
 test('rutas administrativas estan protegidas y solo mutan mediante POST', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'admin.routes.js'), 'utf8');
   assert.match(source, /router\.use\(requireAuth, requireRole\('ADMIN'\)\)/);
-  assert.match(source, /router\.post\('\/usuarios', createUser\)/);
-  assert.match(source, /router\.post\('\/usuarios\/:id', updateUser\)/);
+  assert.match(source, /router\.post\('\/usuarios', requireCsrf, createUser\)/);
+  assert.match(source, /router\.post\('\/usuarios\/:id', requireCsrf, updateUser\)/);
   assert.doesNotMatch(source, /router\.get\([^\n]+(?:createUser|updateUser)/);
 });
 
-test('/crear-cuenta ya no existe como alta publica ni se enlaza desde login', () => {
+test('/crear-cuenta se publica desde login con CSRF y sin selector de rol', () => {
   const routes = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'auth.routes.js'), 'utf8');
   const login = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'auth', 'login.ejs'), 'utf8');
-  assert.doesNotMatch(routes, /crear-cuenta/);
-  assert.doesNotMatch(login, /crear-cuenta|Crear cuenta/);
+  const registration = fs.readFileSync(path.join(__dirname, '..', 'src', 'views', 'auth', 'register.ejs'), 'utf8');
+  assert.match(routes, /router\.get\('\/crear-cuenta', provideCsrfToken, showRegistration\)/);
+  assert.match(routes, /router\.post\('\/crear-cuenta', provideCsrfToken, requireCsrf, register\)/);
+  assert.match(login, /href="\/crear-cuenta"[^>]*>Crear cuenta</);
+  assert.match(registration, /name="_csrf"/);
+  assert.doesNotMatch(registration, /name="rol"|value="ADMIN"|value="CONTABILIDAD"/);
 });

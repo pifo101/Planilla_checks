@@ -84,9 +84,9 @@ npm run create-admin
 Remove-Item Env:ADMIN_PASSWORD
 ```
 
-El script genera un hash bcrypt con 12 rounds y exige correo `@adicla.org.gt`. Es un bootstrap operativo para el primer administrador; una vez disponible ese acceso, solo un `ADMIN` autenticado crea usuarios desde `/admin/usuarios/nuevo`.
+El script genera un hash bcrypt con 12 rounds y exige correo `@adicla.org.gt`. Es un bootstrap operativo para el primer administrador. Un `ADMIN` autenticado puede crear usuarios desde `/admin/usuarios/nuevo` con los roles permitidos por la administracion.
 
-La administracion utiliza SQL Server real. Un `ADMIN` puede listar usuarios, crear cuentas, cambiar rol/agencia y bloquear o reactivar accesos. `ADMIN` y `CONTABILIDAD` siempre quedan con `agencia_id = NULL`; `ASISTENTE` requiere una agencia activa. No existe auto-registro publico y `/crear-cuenta` responde 404.
+La administracion utiliza SQL Server real. Un `ADMIN` puede listar usuarios, crear cuentas, cambiar rol/agencia y bloquear o reactivar accesos. `ADMIN` y `CONTABILIDAD` siempre quedan con `agencia_id = NULL`; `ASISTENTE` requiere una agencia activa. El Login enlaza `/crear-cuenta`, donde una persona puede solicitar solamente una cuenta `ASISTENTE` asociada a una agencia activa. La cuenta se inserta con `activo = 0` y no puede iniciar sesion hasta que un administrador la active.
 
 ## Iniciar y probar
 
@@ -118,7 +118,7 @@ La integracion crea datos temporales en la base de pruebas, valida administracio
 
 El login provisional fue reemplazado por consulta a SQL Server y `bcrypt.compare`. La sesion solo guarda `id`, `nombre`, `email`, `rol`, `agenciaId` y el nombre de agencia para presentacion; nunca guarda contrasenas ni hashes. Cada peticion protegida vuelve a consultar el usuario por ID para aplicar inmediatamente desactivaciones y cambios de rol o agencia.
 
-`admin.service.js` exige correo institucional `@adicla.org.gt`, nombre de hasta 150 caracteres, contrasena nueva de al menos 12 caracteres y confirmacion coincidente. Genera bcrypt con 12 rounds, normaliza el correo a minusculas y traduce conflictos UNIQUE de correo a un mensaje controlado. El administrador autenticado no puede bloquearse ni quitarse su propio rol. No existe por ahora una regla empresarial para impedir que otro administrador bloquee al ultimo ADMIN activo.
+`account.service.js` centraliza para el alta administrativa y publica el correo institucional `@adicla.org.gt`, nombre de hasta 150 caracteres, contrasena nueva de al menos 12 caracteres y confirmacion coincidente. Genera bcrypt con 12 rounds, normaliza el correo a minusculas y traduce conflictos UNIQUE de correo a un mensaje controlado. `admin.service.js` agrega las politicas exclusivas de ADMIN. El administrador autenticado no puede bloquearse ni quitarse su propio rol. No existe por ahora una regla empresarial para impedir que otro administrador bloquee al ultimo ADMIN activo.
 
 El dashboard de `ADMIN` es de solo lectura y obtiene de SQL Server los totales de usuarios, estados, roles, agencias y la cantidad de asistentes asociados por agencia. No consulta planillas ni presenta una actividad administrativa reciente, porque todavia no existe una auditoria capaz de respaldar ese historial.
 
@@ -138,6 +138,6 @@ El contrato, campos, calculos conocidos, errores y reglas pendientes del Web Ser
 
 - El Web Service institucional disponible usa HTTP dentro de la red interna; su transporte depende del proveedor.
 - El cifrado y los certificados de SQL Server deben definirse segun la infraestructura del despliegue. La configuracion actual corresponde a SQL Server Express local.
-- El rate limiting de login es recomendable antes del despliegue definitivo, pero no forma parte de esta etapa interna.
-- La decision de traslado, por ser inmutable, exige un token CSRF ligado a la sesion. Los demas formularios HTML existentes aun deben incorporarse a esta proteccion antes de exponer la aplicacion fuera del entorno controlado.
+- El rate limiting de login y registro es recomendable antes del despliegue definitivo, pero no forma parte de esta etapa interna.
+- Las mutaciones autenticadas de administracion, acta diaria, envio de planillas, cierre de sesion y decision de traslado exigen un token CSRF ligado a la sesion. El registro publico tambien crea una sesion anonima para ligar su token CSRF. Los formularios HTML lo envian como `_csrf` y las APIs JSON mediante `x-csrf-token`.
 - Los scripts `002` a `008` requieren que el operador o runner seleccione explicitamente la base destino con `sqlcmd -d`.

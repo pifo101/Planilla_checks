@@ -48,23 +48,24 @@ Reglas del flujo:
 35. Cada fila de `solicitudes_planilla`, incluidos los miembros grupales con o sin cancelacion, contribuye una vez a los totales por planilla y a los totales del conjunto filtrado.
 36. El detalle de Contabilidad muestra los valores persistidos y el snapshot `planillas.numero_acta`; no consulta nuevamente el Web Service ni sustituye el acta historica con el acta vigente.
 37. Listar o abrir una planilla desde Contabilidad es una operacion de solo lectura. Solo `POST /contabilidad/planillas/:id/traslado` decide y no cambia `planillas.estado`, `solicitudes_planilla.estado`, `procesado` ni `fecha_procesado`.
-38. Solo un usuario `ADMIN` autenticado puede listar, crear o modificar administrativamente usuarios. No existe auto-registro publico.
+38. Solo un usuario `ADMIN` autenticado puede listar o modificar administrativamente usuarios y puede crear cualquiera de los roles admitidos. El registro publico solo puede crear `ASISTENTE`; el servidor ignora cualquier rol enviado por el navegador.
 39. Toda cuenta nueva usa un correo `@adicla.org.gt` normalizado a minusculas y una contrasena de al menos 12 caracteres almacenada con bcrypt y 12 rounds.
 40. `ASISTENTE` requiere una agencia activa. `ADMIN` y `CONTABILIDAD` no pertenecen a una agencia; el backend descarta cualquier agencia enviada para esos roles.
 41. La administracion permite cambiar solamente rol, agencia y estado. No edita nombre, correo ni contrasena y no elimina fisicamente usuarios.
 42. Un `ADMIN` no puede bloquearse ni quitarse su propio rol. No se ha confirmado una regla adicional de ultimo administrador activo.
 43. Bloqueos, cambios de rol y cambios de agencia se aplican en la siguiente peticion protegida porque la sesion se revalida contra SQL Server.
-44. Solo `CONTABILIDAD` puede decidir traslado. `ASISTENTE`, `ADMIN` y usuarios no autenticados no pueden hacerlo; fecha y usuario proceden del servidor.
-45. `Trasladada` registra que Contabilidad traslado la planilla al proceso posterior. No aprueba creditos, solicitudes o desembolsos.
-46. `No trasladada` registra unicamente que la planilla no fue trasladada. No rechaza creditos ni devuelve solicitudes a una agencia.
-47. La primera decision gana mediante un `UPDATE` atomico condicionado por `trasladado IS NULL`. Una decision existente no se edita mediante el flujo normal.
-48. El historial general contiene `trasladado IS NOT NULL` y filtra por el dia de `fecha_decision_traslado` en `America/Guatemala`, agencia y resultado. `fecha_envio` permanece visible.
-49. `ENVIADA`, `RECIBIDA` y `PROCESADA` siguen siendo estados tecnicos legados de `planillas`; `RECIBIDA` y `PROCESADA` no representan la decision de traslado y esta feature no los modifica.
-50. El dashboard es exclusivo de `ADMIN`, de solo lectura y resume mediante agregaciones SQL usuarios, estados, roles, agencias y asistentes asociados. No muestra actividad reciente porque no existe auditoria administrativa persistida.
+44. Una cuenta creada mediante `/crear-cuenta` requiere una agencia activa y se guarda con `activo = 0`. No puede iniciar sesion hasta que un `ADMIN` la active con la administracion existente. El modelo actual no distingue pendiente de activacion de bloqueada.
+45. Solo `CONTABILIDAD` puede decidir traslado. `ASISTENTE`, `ADMIN` y usuarios no autenticados no pueden hacerlo; fecha y usuario proceden del servidor.
+46. `Trasladada` registra que Contabilidad traslado la planilla al proceso posterior. No aprueba creditos, solicitudes o desembolsos.
+47. `No trasladada` registra unicamente que la planilla no fue trasladada. No rechaza creditos ni devuelve solicitudes a una agencia.
+48. La primera decision gana mediante un `UPDATE` atomico condicionado por `trasladado IS NULL`. Una decision existente no se edita mediante el flujo normal.
+49. El historial general contiene `trasladado IS NOT NULL` y filtra por el dia de `fecha_decision_traslado` en `America/Guatemala`, agencia y resultado. `fecha_envio` permanece visible.
+50. `ENVIADA`, `RECIBIDA` y `PROCESADA` siguen siendo estados tecnicos legados de `planillas`; `RECIBIDA` y `PROCESADA` no representan la decision de traslado y esta feature no los modifica.
+51. El dashboard es exclusivo de `ADMIN`, de solo lectura y resume mediante agregaciones SQL usuarios, estados, roles, agencias y asistentes asociados. No muestra actividad reciente porque no existe auditoria administrativa persistida.
 
 ## Pendientes de confirmacion del ingeniero
 
 1. Correccion de decision de traslado: pendiente de definicion funcional. No existe endpoint ni interfaz para cambiar una decision.
 2. La autoridad y el procedimiento excepcional para corregir un acta introducida incorrectamente. No existe correccion ordinaria en esta feature.
 3. La regla empresarial para proteger al ultimo `ADMIN` activo ante cambios realizados por otro administrador.
-4. Extender la proteccion CSRF de la decision de traslado al resto de formularios autenticados.
+4. Mantener la proteccion CSRF de todas las mutaciones autenticadas al incorporar nuevos formularios o APIs.

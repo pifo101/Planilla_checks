@@ -1,10 +1,7 @@
 const authService = require('../services/auth.service');
-
-function homeForRole(role) {
-  if (role === 'ASISTENTE') return '/asistente/nueva-planilla';
-  if (role === 'CONTABILIDAD') return '/contabilidad/planillas';
-  return '/dashboard';
-}
+const accountService = require('../services/account.service');
+const agencyRepository = require('../repositories/agency.repository');
+const { homeForRole } = require('../utils/navigation');
 
 function showLogin(req, res) {
   if (req.session.user) {
@@ -14,7 +11,53 @@ function showLogin(req, res) {
   return res.render('auth/login', {
     pageTitle: 'Iniciar sesion',
     layout: false,
+    message: req.query.created
+      ? 'Cuenta creada correctamente. Un administrador debe activarla antes de que puedas iniciar sesion.'
+      : null,
   });
+}
+
+async function showRegistration(req, res, next) {
+  if (req.session.user) return res.redirect(homeForRole(req.session.user.rol));
+
+  try {
+    return res.render('auth/register', {
+      pageTitle: 'Crear cuenta',
+      layout: false,
+      agencies: await agencyRepository.findActive(),
+      values: {},
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function register(req, res, next) {
+  if (req.session.user) return res.redirect(homeForRole(req.session.user.rol));
+
+  const values = {
+    nombre: String(req.body.nombre || '').trim(),
+    email: String(req.body.email || '').trim().toLowerCase(),
+    agenciaId: String(req.body.agenciaId || '').trim(),
+  };
+
+  try {
+    await accountService.registerPublicAccount(req.body);
+    return res.redirect('/login?created=1');
+  } catch (error) {
+    if (!(error instanceof accountService.AccountError)) return next(error);
+    try {
+      return res.status(error.status).render('auth/register', {
+        pageTitle: 'Crear cuenta',
+        layout: false,
+        agencies: await agencyRepository.findActive(),
+        values,
+        error: error.message,
+      });
+    } catch (renderError) {
+      return next(renderError);
+    }
+  }
 }
 
 function regenerateSession(req) {
@@ -83,6 +126,8 @@ function logout(req, res, next) {
 
 module.exports = {
   showLogin,
+  showRegistration,
   login,
   logout,
+  register,
 };

@@ -32,6 +32,7 @@ const managedAssistantEmail = `managed-assistant-${suffix}@adicla.org.gt`;
 const managedAccountingEmail = `managed-accounting-${suffix}@adicla.org.gt`;
 const password = crypto.randomBytes(18).toString('base64url');
 let server;
+const csrfTokensByCookie = new Map();
 let fixturesCreated = false;
 
 function startServer() {
@@ -57,11 +58,12 @@ async function login(baseUrl, email, loginPassword) {
 }
 
 async function postForm(url, cookie, values) {
+  const csrfToken = csrfTokensByCookie.get(cookie);
   return fetch(url, {
     method: 'POST',
     redirect: 'manual',
     headers: { cookie, 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams(values),
+    body: new URLSearchParams({ ...values, ...(csrfToken ? { _csrf: csrfToken } : {}) }),
   });
 }
 
@@ -645,7 +647,12 @@ async function main() {
   const port = await startServer();
   const baseUrl = `http://127.0.0.1:${port}`;
   const publicRegistration = await fetch(`${baseUrl}/crear-cuenta`, { redirect: 'manual' });
-  assert.equal(publicRegistration.status, 404);
+  assert.equal(publicRegistration.status, 200);
+  const publicRegistrationHtml = await publicRegistration.text();
+  assert.match(publicRegistrationHtml, /action="\/crear-cuenta" method="post"/);
+  assert.match(publicRegistrationHtml, /name="_csrf" value="[A-Za-z0-9_-]+"/);
+  assert.match(publicRegistrationHtml, /name="agenciaId"/);
+  assert.doesNotMatch(publicRegistrationHtml, /name="rol"|value="ADMIN"|value="CONTABILIDAD"/);
   const withoutSession = await fetch(`${baseUrl}/dashboard`, { redirect: 'manual' });
   assert.equal(withoutSession.status, 302);
   assert.equal(withoutSession.headers.get('location'), '/login');
@@ -724,6 +731,9 @@ async function main() {
   const adminUsersPage = await fetch(`${baseUrl}/admin/usuarios`, { headers: { cookie: adminCookie } });
   assert.equal(adminUsersPage.status, 200);
   const adminUsersHtml = await adminUsersPage.text();
+  const adminCsrfToken = adminUsersHtml.match(/name="_csrf" value="([^"]+)"/)?.[1];
+  assert.ok(adminCsrfToken);
+  csrfTokensByCookie.set(adminCookie, adminCsrfToken);
   assert.match(adminUsersHtml, new RegExp(adminEmail));
   assert.doesNotMatch(adminUsersHtml, /Datos de demostracion|password_hash/i);
 
@@ -819,9 +829,13 @@ async function main() {
   assert.equal(validLogin.status, 302);
   assert.equal(validLogin.headers.get('location'), '/asistente/nueva-planilla');
   const cookie = validLogin.headers.get('set-cookie').split(';', 1)[0];
+  const assistantPage = await fetch(`${baseUrl}/asistente/nueva-planilla`, { headers: { cookie } });
+  const assistantHtml = await assistantPage.text();
+  const assistantCsrfToken = assistantHtml.match(/data-csrf-token="([^"]+)"/)?.[1];
+  assert.ok(assistantCsrfToken);
   const submittedResponse = await fetch(`${baseUrl}/api/planillas`, {
     method: 'POST',
-    headers: { cookie, 'content-type': 'application/json' },
+    headers: { cookie, 'content-type': 'application/json', 'x-csrf-token': assistantCsrfToken },
     body: JSON.stringify({
       solicitudes: [{
         ...solicitud,

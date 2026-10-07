@@ -1,4 +1,5 @@
 const userRepository = require('../repositories/user.repository');
+const { homeForRole } = require('../utils/navigation');
 
 function rejectAuthentication(req, res) {
   res.clearCookie('planilla.sid');
@@ -48,6 +49,7 @@ async function requireAuth(req, res, next) {
     };
     req.session.user = currentUser;
     res.locals.currentUser = currentUser;
+    res.locals.homePath = homeForRole(currentUser.rol);
     return next();
   } catch (error) {
     return next(error);

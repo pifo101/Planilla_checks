@@ -14,7 +14,7 @@
     };
   }
 
-  function createPlanillaSubmitter(fetchImpl) {
+  function createPlanillaSubmitter(fetchImpl, csrfToken = '') {
     let pending = false;
 
     return {
@@ -33,6 +33,7 @@
             headers: {
               accept: 'application/json',
               'content-type': 'application/json',
+              'x-csrf-token': csrfToken,
             },
             body: JSON.stringify(buildSubmission(draftRequests)),
           });

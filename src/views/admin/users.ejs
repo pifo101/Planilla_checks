@@ -58,25 +58,25 @@
       </div>
     </section>
 
-    <section class="card" aria-labelledby="users-table-title">
+    <section class="card users-table-card" aria-labelledby="users-table-title">
       <div class="card-header bg-white border-0 px-4 pt-4 d-flex justify-content-between align-items-center gap-3">
         <h2 class="h5 mb-0" id="users-table-title">Usuarios registrados</h2>
         <span class="small text-muted" data-user-count><%= users.length %> resultados</span>
       </div>
       <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
+        <table class="table table-hover align-middle mb-0 users-table">
           <caption class="visually-hidden">Listado de usuarios registrados</caption>
           <thead><tr><th scope="col">Usuario</th><th scope="col">Correo</th><th scope="col">Rol</th><th scope="col">Agencia</th><th scope="col">Estado</th><th scope="col">Creado</th><th scope="col" class="text-end">Accion</th></tr></thead>
           <tbody>
-            <% users.forEach((user) => { const status = user.activo ? 'ACTIVO' : 'BLOQUEADO'; const formId = `user-access-${user.id}`; %>
+            <% users.forEach((user) => { const status = user.activo ? 'ACTIVO' : 'BLOQUEADO'; const formId = `user-access-${user.id}`; const isCurrentUser = Number(user.id) === Number(currentUser.id); %>
               <tr data-user-row data-search="<%= `${user.nombre} ${user.email}`.toLowerCase() %>" data-role="<%= user.rol %>" data-agency="<%= user.agenciaNombre || '' %>" data-status="<%= status %>">
-                <td><div class="d-flex align-items-center gap-2"><span class="user-avatar"><%= user.nombre.split(' ').map((part) => part[0]).slice(0, 2).join('') %></span><span class="fw-semibold"><%= user.nombre %></span></div></td>
-                <td><a href="mailto:<%= user.email %>"><%= user.email %></a></td>
-                <td><select class="form-select form-select-sm" name="rol" form="<%= formId %>" aria-label="Rol de <%= user.nombre %>" data-access-role><% roles.forEach((role) => { %><option value="<%= role %>" <%= user.rol === role ? 'selected' : '' %>><%= roleLabels[role] %></option><% }) %></select></td>
-                <td><select class="form-select form-select-sm" name="agenciaId" form="<%= formId %>" aria-label="Agencia de <%= user.nombre %>" data-access-agency><option value="">Sin agencia</option><% agencies.forEach((agency) => { %><option value="<%= agency.id %>" <%= Number(user.agenciaId) === Number(agency.id) ? 'selected' : '' %>><%= agency.nombre %></option><% }) %></select></td>
-                <td><select class="form-select form-select-sm" name="activo" form="<%= formId %>" aria-label="Estado de <%= user.nombre %>"><option value="true" <%= user.activo ? 'selected' : '' %>>Activo</option><option value="false" <%= !user.activo ? 'selected' : '' %>>Bloqueado</option></select></td>
+                <td><div class="d-flex align-items-center gap-2"><span class="user-avatar"><%= user.nombre.split(' ').map((part) => part[0]).slice(0, 2).join('') %></span><span class="fw-semibold overflow-text"><%= user.nombre %></span></div></td>
+                <td class="overflow-text"><a href="mailto:<%= user.email %>"><%= user.email %></a></td>
+                <td><select class="form-select form-select-sm" name="rol" <%- isCurrentUser ? 'disabled' : `form="${formId}"` %> aria-label="Rol de <%= user.nombre %>" data-access-role><% roles.forEach((role) => { %><option value="<%= role %>" <%= user.rol === role ? 'selected' : '' %>><%= roleLabels[role] %></option><% }) %></select></td>
+                <td><select class="form-select form-select-sm" name="agenciaId" <%- isCurrentUser ? 'disabled' : `form="${formId}"` %> aria-label="Agencia de <%= user.nombre %>" data-access-agency><option value="">Sin agencia</option><% agencies.forEach((agency) => { %><option value="<%= agency.id %>" <%= Number(user.agenciaId) === Number(agency.id) ? 'selected' : '' %>><%= agency.nombre %></option><% }) %></select></td>
+                <td><select class="form-select form-select-sm" name="activo" <%- isCurrentUser ? 'disabled' : `form="${formId}"` %> aria-label="Estado de <%= user.nombre %>"><option value="true" <%= user.activo ? 'selected' : '' %>>Activo</option><option value="false" <%= !user.activo ? 'selected' : '' %>>Bloqueado</option></select></td>
                 <td class="text-muted text-nowrap"><%= dateTime.format(user.createdAt) %></td>
-                <td class="text-end"><form id="<%= formId %>" action="/admin/usuarios/<%= user.id %>" method="post" data-user-access-form><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-check2 me-1"></i>Guardar</button></form></td>
+                <td class="text-end"><% if (isCurrentUser) { %><span class="small text-muted text-nowrap">Cuenta actual</span><% } else { %><form id="<%= formId %>" action="/admin/usuarios/<%= user.id %>" method="post" data-user-access-form><input type="hidden" name="_csrf" value="<%= csrfToken %>"><button class="btn btn-sm btn-outline-primary text-nowrap" type="submit"><i class="bi bi-check2 me-1"></i>Guardar</button></form><% } %></td>
               </tr>
             <% }) %>
             <tr class="<%= users.length ? 'd-none' : '' %>" data-users-empty><td class="text-center text-muted py-5" colspan="7"><i class="bi bi-search d-block fs-3 mb-2"></i>No se encontraron usuarios con esos filtros.</td></tr>

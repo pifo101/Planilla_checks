@@ -27,6 +27,10 @@ if (adminFilters) {
 
   adminFilters.addEventListener('input', applyUserFilters);
   adminFilters.addEventListener('change', applyUserFilters);
+  adminFilters.addEventListener('submit', (event) => {
+    event.preventDefault();
+    applyUserFilters();
+  });
   adminFilters.addEventListener('reset', () => window.setTimeout(applyUserFilters));
 }
 
@@ -54,8 +58,10 @@ if (accountForm) {
   const password = accountForm.elements.password;
   const confirmation = accountForm.elements.confirmPassword;
 
-  syncAgency(role, agency, agencyContainer);
-  role.addEventListener('change', () => syncAgency(role, agency, agencyContainer));
+  if (role && agency) {
+    syncAgency(role, agency, agencyContainer);
+    role.addEventListener('change', () => syncAgency(role, agency, agencyContainer));
+  }
 
   accountForm.addEventListener('submit', (event) => {
     confirmation.setCustomValidity(password.value === confirmation.value ? '' : 'Las contrasenas no coinciden.');

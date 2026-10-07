@@ -1,0 +1,65 @@
+<%- include('../partials/head') %>
+<main class="login-page d-flex align-items-center justify-content-center p-3 py-sm-4">
+  <section class="card login-card create-account-card border-0 p-2 p-sm-4">
+    <div class="card-body">
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <span class="brand-mark"><i class="bi bi-person-plus"></i></span>
+        <div>
+          <h1 class="h4 mb-0">Crear cuenta</h1>
+          <span class="text-muted small">Acceso institucional como asistente</span>
+        </div>
+      </div>
+
+      <% if (typeof error !== 'undefined') { %>
+        <div class="alert alert-danger" role="alert"><%= error %></div>
+      <% } %>
+
+      <form action="/crear-cuenta" method="post" data-account-form novalidate>
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+        <div class="row g-3">
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="fullName">Nombre completo <span class="required-mark" aria-hidden="true">*</span></label>
+            <input class="form-control" id="fullName" name="nombre" type="text" maxlength="150" value="<%= values.nombre || '' %>" autocomplete="name" required autofocus>
+            <div class="invalid-feedback">Ingresa el nombre completo.</div>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="email">Correo institucional <span class="required-mark" aria-hidden="true">*</span></label>
+            <input class="form-control" id="email" name="email" type="email" maxlength="254" value="<%= values.email || '' %>" placeholder="persona@adicla.org.gt" autocomplete="email" required>
+            <div class="invalid-feedback">Ingresa un correo @adicla.org.gt valido.</div>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="password">Contrasena <span class="required-mark" aria-hidden="true">*</span></label>
+            <div class="input-group has-validation">
+              <input class="form-control" id="password" name="password" type="password" minlength="12" autocomplete="new-password" required>
+              <button class="btn btn-outline-secondary password-toggle" type="button" data-password-toggle="password" aria-label="Mostrar contrasena" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
+              <div class="invalid-feedback">Usa al menos 12 caracteres.</div>
+            </div>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="confirmPassword">Confirmar contrasena <span class="required-mark" aria-hidden="true">*</span></label>
+            <div class="input-group has-validation">
+              <input class="form-control" id="confirmPassword" name="confirmPassword" type="password" minlength="12" autocomplete="new-password" required>
+              <button class="btn btn-outline-secondary password-toggle" type="button" data-password-toggle="confirmPassword" aria-label="Mostrar confirmacion de contrasena" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button>
+              <div class="invalid-feedback">Las contrasenas deben coincidir.</div>
+            </div>
+          </div>
+          <div class="col-12">
+            <label class="form-label" for="newAgency">Agencia <span class="required-mark" aria-hidden="true">*</span></label>
+            <select class="form-select" id="newAgency" name="agenciaId" data-access-agency required>
+              <option value="">Seleccionar agencia</option>
+              <% agencies.forEach((agency) => { %><option value="<%= agency.id %>" <%= Number(values.agenciaId) === Number(agency.id) ? 'selected' : '' %>><%= agency.nombre %></option><% }) %>
+            </select>
+            <div class="invalid-feedback">Selecciona una agencia activa.</div>
+          </div>
+        </div>
+        <p class="small text-muted mt-3 mb-0">La cuenta se registrara como ASISTENTE y debera ser activada por un administrador.</p>
+        <button class="btn btn-primary btn-lg w-100 mt-4" type="submit">Crear cuenta</button>
+      </form>
+      <div class="text-center mt-3">
+        <a href="/login"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Volver a iniciar sesion</a>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="/js/admin.js"></script>
+<%- include('../partials/footer') %>

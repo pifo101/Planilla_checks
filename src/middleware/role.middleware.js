@@ -15,6 +15,7 @@ function requireRole(...roles) {
       return res.status(403).render('500', {
         pageTitle: 'Acceso denegado',
         errorMessage: 'No tienes permisos para acceder a este modulo.',
+        errorCode: 403,
       });
     }
 

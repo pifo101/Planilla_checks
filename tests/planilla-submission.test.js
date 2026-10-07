@@ -39,12 +39,13 @@ test('envia una sola peticion POST y devuelve la confirmacion persistida', async
       ok: true,
       json: async () => ({ success: true, data: { planilla: { codigo: 'PLN-TEST', estado: 'ENVIADA' } } }),
     };
-  });
+  }, 'csrf-test');
 
   const planilla = await submitter.submit([draftRequest()]);
   assert.equal(captured.url, '/api/planillas');
   assert.equal(captured.options.method, 'POST');
   assert.equal(captured.options.headers['content-type'], 'application/json');
+  assert.equal(captured.options.headers['x-csrf-token'], 'csrf-test');
   assert.deepEqual(JSON.parse(captured.options.body), buildSubmission([draftRequest()]));
   assert.deepEqual(planilla, { codigo: 'PLN-TEST', estado: 'ENVIADA' });
   assert.equal(submitter.isPending(), false);

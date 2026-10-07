@@ -23,13 +23,13 @@
               <tr><td class="text-center text-muted py-5" colspan="11">No hay planillas enviadas en la fecha seleccionada.</td></tr>
             <% } %>
             <% planillas.forEach((planilla) => { %>
-              <tr><td class="fw-semibold"><%= planilla.codigo %></td><td><%= planilla.numeroActa || 'Sin asignar' %></td><td class="text-nowrap"><%= dateTime.format(planilla.fechaEnvio) %></td><td><%= planilla.agenciaNombre %></td><td><%= planilla.cantidadRegistros %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalAprobado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalCancelado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalDescuentos) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalMontoCheque) %></td><td><span class="status-badge status-<%= planilla.estado.toLowerCase() %>"><%= planilla.estado %></span></td><td class="text-end"><a class="btn btn-sm btn-outline-primary text-nowrap" href="/asistente/planillas/<%= planilla.id %>"><i class="bi bi-eye me-1"></i>Ver detalle</a></td></tr>
+              <tr><td class="fw-semibold"><%= planilla.codigo %></td><td><%= planilla.numeroActa || 'Sin asignar' %></td><td class="text-nowrap"><%= dateTime.format(planilla.fechaEnvio) %></td><td><%= planilla.agenciaNombre %></td><td><%= planilla.cantidadRegistros %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalAprobado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalCancelado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalDescuentos) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalMontoCheque) %></td><td><span class="status-badge status-<%= planilla.estado.toLowerCase() %>"><%= planilla.estado %></span></td><td class="text-end"><a class="btn btn-sm btn-outline-primary text-nowrap" href="/asistente/planillas/<%= planilla.id %>?returnTo=<%= encodeURIComponent(returnTo) %>"><i class="bi bi-eye me-1"></i>Ver detalle</a></td></tr>
             <% }) %>
           </tbody>
         </table>
       </div>
       <% if (totalPages > 1) { %>
-        <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+        <div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
           <span class="text-muted small"><%= total %> planillas · Pagina <%= page %> de <%= totalPages %></span>
           <div class="btn-group" aria-label="Paginacion">
             <a class="btn btn-sm btn-outline-secondary <%= page === 1 ? 'disabled' : '' %>" href="?fecha=<%= selectedDate %>&page=<%= page - 1 %>" <%= page === 1 ? 'aria-disabled=true tabindex=-1' : '' %>>Anterior</a>

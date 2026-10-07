@@ -11,6 +11,8 @@ const adminRoutes = require('./routes/admin.routes');
 const assistantRoutes = require('./routes/assistant.routes');
 const accountingRoutes = require('./routes/accounting.routes');
 const apiRoutes = require('./routes/api.routes');
+const { provideCsrfToken } = require('./middleware/csrf.middleware');
+const { homeForRole } = require('./utils/navigation');
 
 const app = express();
 
@@ -45,6 +47,7 @@ app.use(
 app.use((req, res, next) => {
   res.locals.currentPath = req.path;
   res.locals.currentUser = req.session.user || null;
+  res.locals.homePath = homeForRole(req.session.user?.rol);
   res.locals.currency = new Intl.NumberFormat('es-GT', {
     style: 'currency',
     currency: 'GTQ',
@@ -56,6 +59,11 @@ app.use((req, res, next) => {
   });
   res.locals.sqlCurrency = { format: formatSqlCurrency };
   next();
+});
+
+app.use((req, res, next) => {
+  if (!req.session.user) return next();
+  return provideCsrfToken(req, res, next);
 });
 
 app.use(authRoutes);
@@ -98,6 +106,7 @@ app.use((error, req, res, next) => {
   return res.status(500).render('500', {
     pageTitle: 'Error del servidor',
     errorMessage: config.isProduction ? null : error.message,
+    errorCode: 500,
   });
 });
 

@@ -1,5 +1,6 @@
 const planillaService = require('../services/planilla.service');
 const actaService = require('../services/acta.service');
+const { safeReturnTo } = require('../utils/navigation');
 
 async function showNewPlanilla(req, res) {
   try {
@@ -14,6 +15,7 @@ async function showNewPlanilla(req, res) {
     return res.status(500).render('500', {
       pageTitle: 'Error del servidor',
       errorMessage: 'No fue posible consultar el acta del dia en este momento.',
+      errorCode: 500,
     });
   }
 }
@@ -31,6 +33,7 @@ function renderHistoryError(error, res) {
   return res.status(500).render('500', {
     pageTitle: 'Error del servidor',
     errorMessage: 'No fue posible consultar las planillas en este momento.',
+    errorCode: 500,
   });
 }
 
@@ -38,9 +41,14 @@ async function listSentPlanillas(req, res) {
   try {
     const history = await planillaService.listSentPlanillas(req.session.user, req.query);
     res.set('Cache-Control', 'no-store');
+    const returnTo = `/asistente/planillas?${new URLSearchParams({
+      fecha: history.selectedDate,
+      page: String(history.page),
+    })}`;
     return res.render('assistant/sent-planillas', {
       pageTitle: 'Planillas enviadas',
       ...history,
+      returnTo,
     });
   } catch (error) {
     return renderHistoryError(error, res);
@@ -61,6 +69,7 @@ async function showSentPlanilla(req, res) {
     return res.render('assistant/planilla-detail', {
       pageTitle: `Planilla ${planilla.codigo}`,
       planilla,
+      returnTo: safeReturnTo(req.query?.returnTo, ['/asistente/planillas'], '/asistente/planillas'),
     });
   } catch (error) {
     return renderHistoryError(error, res);

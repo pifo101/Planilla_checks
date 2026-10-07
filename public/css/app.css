@@ -4,6 +4,7 @@
   --color-primary-soft: #E9EEFF;
   --color-accent: #F6CD03;
   --color-accent-hover: #DDB800;
+  --color-focus: #8A5A00;
   --color-accent-soft: #FFF8D6;
   --color-border: #E8E8E8;
   --color-background: #F7F8FC;
@@ -109,6 +110,17 @@ body {
   width: calc(100% - var(--app-sidebar-width));
   min-width: 0;
   padding: 2rem;
+}
+
+.app-main > *,
+.card,
+.table-responsive {
+  min-width: 0;
+}
+
+.table-responsive {
+  width: 100%;
+  max-width: 100%;
 }
 
 .page-eyebrow {
@@ -413,8 +425,22 @@ hr {
 }
 
 :focus-visible {
-  outline: 3px solid var(--color-accent);
+  outline: 3px solid var(--color-focus);
   outline-offset: 2px;
+}
+
+.overflow-text,
+.detail-label + * {
+  overflow-wrap: anywhere;
+}
+
+.users-table-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.users-table {
+  min-width: 980px;
 }
 
 .demo-label {
@@ -594,12 +620,17 @@ hr {
     left: 0;
     z-index: 1025;
     overflow-y: auto;
+    visibility: hidden;
+    pointer-events: none;
     transform: translateX(-100%);
-    transition: transform .2s ease;
+    transition: transform .2s ease, visibility 0s linear .2s;
   }
 
   body.sidebar-open .app-sidebar {
+    visibility: visible;
+    pointer-events: auto;
     transform: translateX(0);
+    transition-delay: 0s;
   }
 
   body.sidebar-open::after {

@@ -5,6 +5,7 @@ const { submitPlanilla } = require('../controllers/planilla.controller');
 const { createDailyActa, getDailyActa } = require('../controllers/acta.controller');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/role.middleware');
+const { requireCsrf } = require('../middleware/csrf.middleware');
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ router.use(requireAuth);
 router.get('/solicitudes/:numeroSolicitud/distribucion', requireRole('ASISTENTE'), getDistribution);
 router.get('/solicitudes/:numeroSolicitud/disponibilidad', requireRole('ASISTENTE'), checkAvailability);
 router.get('/acta-diaria', getDailyActa);
-router.post('/acta-diaria', requireRole('ASISTENTE'), createDailyActa);
-router.post('/planillas', requireRole('ASISTENTE'), submitPlanilla);
+router.post('/acta-diaria', requireRole('ASISTENTE'), requireCsrf, createDailyActa);
+router.post('/planillas', requireRole('ASISTENTE'), requireCsrf, submitPlanilla);
 
 module.exports = router;

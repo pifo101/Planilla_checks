@@ -85,9 +85,11 @@ test('decision entrega solo sesion, ID y body al servicio y redirige con 303', a
     return { id: 41, trasladado: false };
   };
   const res = response();
-  await decideTransfer({ session: { user: sessionUser }, params: { id: '41' }, body, is: () => false }, res);
+  const req = { session: { user: sessionUser }, params: { id: '41' }, body, is: () => false };
+  await decideTransfer(req, res);
   assert.equal(res.statusCode, 303);
   assert.equal(res.location, '/contabilidad/planillas');
+  assert.equal(req.session.accountingFeedback, 'La planilla fue marcada como no trasladada.');
 });
 
 test('decision JSON devuelve conflicto controlado sin exponer SQL', async () => {

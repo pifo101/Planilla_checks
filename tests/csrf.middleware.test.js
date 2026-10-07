@@ -42,3 +42,16 @@ test('acepta token de formulario o header y rechaza token ausente', () => {
   assert.equal(res.statusCode, 403);
   assert.equal(res.body.error.code, 'INVALID_CSRF_TOKEN');
 });
+
+test('rechaza tokens incorrectos y Unicode sin lanzar una excepcion', () => {
+  const token = 'a'.repeat(43);
+  for (const received of ['b'.repeat(43), 'á'.repeat(43)]) {
+    const res = response();
+    requireCsrf(
+      { session: { csrfToken: token }, body: { _csrf: received }, get: () => null, is: () => false },
+      res,
+      () => assert.fail('No debe continuar con un token incorrecto.'),
+    );
+    assert.equal(res.statusCode, 403);
+  }
+});
