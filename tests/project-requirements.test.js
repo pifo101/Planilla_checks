@@ -50,3 +50,27 @@ test('las mutaciones autenticadas aplican CSRF sin proteger consultas GET', () =
   assert.match(adminRoutes, /router\.post\('\/usuarios\/:id', requireCsrf, updateUser\)/);
   assert.match(authRoutes, /router\.post\('\/logout', requireCsrf, logout\)/);
 });
+
+test('descargas PDF productivas quedan limitadas a ASISTENTE y CONTABILIDAD', () => {
+  const assistantRoutes = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'assistant.routes.js'), 'utf8');
+  const accountingRoutes = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'accounting.routes.js'), 'utf8');
+  const adminRoutes = fs.readFileSync(path.join(__dirname, '..', 'src', 'routes', 'admin.routes.js'), 'utf8');
+
+  assert.match(assistantRoutes, /router\.use\(requireAuth, requireRole\('ASISTENTE'\)\)/);
+  assert.match(assistantRoutes, /router\.get\('\/planillas\/:id\/pdf', downloadAssistantPlanilla\)/);
+  assert.match(accountingRoutes, /router\.use\(requireAuth, requireRole\('CONTABILIDAD'\)\)/);
+  assert.match(accountingRoutes, /router\.get\('\/planillas\/:id\/pdf', downloadAccountingPlanilla\)/);
+  assert.doesNotMatch(adminRoutes, /planillas\/:id\/pdf|download.*Planilla/i);
+});
+
+test('detalle de ASISTENTE conserva la autoria historica de la decision de traslado', () => {
+  const repository = fs.readFileSync(path.join(__dirname, '..', 'src', 'repositories', 'planilla.repository.js'), 'utf8');
+  const assistantDetail = repository.match(/async function findDetailForAgency[\s\S]+?async function findPendingForAccounting/)?.[0];
+
+  assert.ok(assistantDetail);
+  assert.match(assistantDetail, /p\.trasladado/);
+  assert.match(assistantDetail, /p\.fecha_decision_traslado AS fechaDecisionTraslado/);
+  assert.match(assistantDetail, /p\.decision_traslado_usuario_id AS decisionTrasladoUsuarioId/);
+  assert.match(assistantDetail, /LEFT JOIN dbo\.usuarios AS du ON du\.id = p\.decision_traslado_usuario_id/);
+  assert.match(assistantDetail, /du\.nombre AS decisionTrasladoUsuario/);
+});

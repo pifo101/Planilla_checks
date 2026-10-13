@@ -1,6 +1,6 @@
 const path = require('path');
 const express = require('express');
-const { generatePlanillaPdf } = require('../src/services/planilla-pdf.service');
+const { generatePlanillaPdf, PDF_CONTEXTS } = require('../src/services/planilla-pdf.service');
 
 const HOST = '127.0.0.1';
 const PORT = 3100;
@@ -164,8 +164,8 @@ function safePdfFilename(code) {
   return `planilla-${safeCode || 'sin-codigo'}.pdf`;
 }
 
-async function sendPlanillaPdf(res, planilla) {
-  const pdf = await generatePlanillaPdf(planilla);
+async function sendPlanillaPdf(res, planilla, context) {
+  const pdf = await generatePlanillaPdf(planilla, { context });
   res.set({
     'Content-Type': 'application/pdf',
     'Content-Disposition': `attachment; filename="${safePdfFilename(planilla.codigo)}"`,
@@ -285,7 +285,7 @@ function createPreviewApp() {
       && item.fechaEnvio
     ));
     if (!planilla) return res.status(404).render('404', { pageTitle: 'Planilla no encontrada', errorMessage: 'La planilla no existe o no pertenece a la agencia demostrativa.', errorCode: 404 });
-    return sendPlanillaPdf(res, planilla);
+    return sendPlanillaPdf(res, planilla, PDF_CONTEXTS.ASSISTANT);
   });
 
   app.get('/asistente/planillas/:id', (req, res) => {
@@ -316,7 +316,7 @@ function createPreviewApp() {
       String(item.id) === req.params.id && item.estado === 'ENVIADA' && item.fechaEnvio
     ));
     if (!planilla) return res.status(404).render('404', { pageTitle: 'Planilla no encontrada', errorMessage: 'La planilla demostrativa solicitada no existe.', errorCode: 404 });
-    return sendPlanillaPdf(res, planilla);
+    return sendPlanillaPdf(res, planilla, PDF_CONTEXTS.ACCOUNTING);
   });
 
   app.get('/contabilidad/planillas/:id', (req, res) => {

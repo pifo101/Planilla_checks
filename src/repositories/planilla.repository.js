@@ -154,7 +154,10 @@ async function findDetailForAgency(id, agenciaId) {
   const result = await request.query(`
     SELECT p.id, p.codigo, p.fecha_creacion AS fechaCreacion, p.fecha_envio AS fechaEnvio,
            p.estado, p.numero_acta AS numeroActa, a.id AS agenciaId, a.nombre AS agenciaNombre,
-           u.id AS usuarioId, u.nombre AS creadaPor,
+           u.id AS usuarioId, u.nombre AS creadaPor, p.trasladado,
+           p.fecha_decision_traslado AS fechaDecisionTraslado,
+           p.decision_traslado_usuario_id AS decisionTrasladoUsuarioId,
+           du.nombre AS decisionTrasladoUsuario,
            COUNT(sp.id) AS cantidadRegistros,
            CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_aprobado), CONVERT(DECIMAL(18, 2), 0))) AS totalAprobado,
            CONVERT(VARCHAR(40), COALESCE(SUM(sp.monto_cancelado), CONVERT(DECIMAL(18, 2), 0))) AS totalCancelado,
@@ -163,10 +166,12 @@ async function findDetailForAgency(id, agenciaId) {
     FROM dbo.planillas AS p
     INNER JOIN dbo.agencias AS a ON a.id = p.agencia_id
     INNER JOIN dbo.usuarios AS u ON u.id = p.creada_por_usuario_id
+    LEFT JOIN dbo.usuarios AS du ON du.id = p.decision_traslado_usuario_id
     LEFT JOIN dbo.solicitudes_planilla AS sp ON sp.planilla_id = p.id
     WHERE p.id = @id AND p.agencia_id = @agenciaId AND p.fecha_envio IS NOT NULL
     GROUP BY p.id, p.codigo, p.fecha_creacion, p.fecha_envio, p.estado,
-             p.numero_acta, a.id, a.nombre, u.id, u.nombre;
+             p.numero_acta, a.id, a.nombre, u.id, u.nombre, p.trasladado,
+             p.fecha_decision_traslado, p.decision_traslado_usuario_id, du.nombre;
 
     SELECT sp.id, sp.numero_solicitud AS numeroSolicitud, sp.miembro_id AS miembroId,
            sp.nombre_cliente AS nombreCliente,

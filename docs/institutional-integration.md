@@ -52,12 +52,12 @@ Esta tabla no habilita autenticacion cruzada. Planillas sigue validando usuarios
 - Despliegue: definir URL, subruta o reverse proxy sin exigir cambios a la logica interna de Planillas.
 - Produccion: definir HTTPS, secretos, almacenamiento persistente de sesiones, observabilidad, respaldo y recuperacion.
 
-## Generacion PDF demostrativa
+## Generacion PDF
 
 La fase local incorpora un generador independiente de SQL Server en `src/services/planilla-pdf.service.js`. Su entrada es un objeto de planilla normalizado por la capa llamadora; el modulo deriva los totales en centavos de los registros incluidos y renderiza un `Buffer` PDF carta horizontal. No importa repositorios, Web Services, sesiones ni APIs del navegador, y no escribe archivos.
 
-`scripts/preview-ui.js` conserva responsabilidades separadas: localiza fixtures ficticios, aplica la restriccion demostrativa de contexto/agencia, llama al generador y entrega el resultado como descarga sin cache. Las rutas de ASISTENTE y CONTABILIDAD existen solo en ese servidor local. ADMIN no tiene ruta equivalente.
+`scripts/preview-ui.js` conserva responsabilidades separadas para la demostracion con fixtures ficticios. En la aplicacion principal, `GET /asistente/planillas/:id/pdf` consulta SQL Server con el ID y la agencia de la sesion revalidada; `GET /contabilidad/planillas/:id/pdf` usa el contrato multiagencia exclusivo de CONTABILIDAD. ADMIN no tiene ruta equivalente. Ambos controladores fijan el contexto PDF en el servidor y entregan el `Buffer` sin cache ni archivos temporales.
 
-Esta separacion no es autorizacion productiva. En la fase real, Planillas debe agregar controladores protegidos por su autenticacion y middleware RBAC existentes, revalidar la sesion contra SQL Server, exigir `ASISTENTE` o `CONTABILIDAD`, aplicar la agencia de la sesion para ASISTENTE y obtener una planilla enviada desde el repositorio autorizado. Solo despues debe construir el mismo contrato de entrada e invocar el generador. No debe confiar en query strings, `sessionStorage`, campos de rol enviados por el navegador ni datos procedentes de `pdf-unifier-app`.
+La autorizacion productiva permanece dentro de Planillas: `requireAuth` revalida la sesion contra SQL Server, cada router exige exclusivamente `ASISTENTE` o `CONTABILIDAD`, y el servicio vuelve a validar rol, ID y agencia antes de consultar. No se confia en query strings, `sessionStorage`, campos de rol enviados por el navegador ni datos procedentes de `pdf-unifier-app`. La futura integracion institucional puede conservar intactos el generador PDF, los servicios de negocio, los repositorios y estas reglas; debe adaptar despliegue, secretos, SQL Server, sesiones y el mecanismo de identidad backend verificable.
 
 Si una fase futura necesitara cambios en `pdf-unifier-app`, esos cambios deben tratarse como una decision institucional separada. La alternativa preferida es resolver compatibilidad mediante configuracion y contratos del lado de Planillas.

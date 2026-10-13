@@ -61,6 +61,7 @@ sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\005_daily_actas.sql" 
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\006_user_role_agency_constraint.sql" -b
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\007_accounting_transfer_decision.sql" -b
 sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\008_request_planilla_integrity.sql" -b
+sqlcmd -S ".\SQLEXPRESS" -E -C -d "$database" -i "database\009_preserve_group_member_updates.sql" -b
 ```
 
 Para preparar el entorno local, define las variables `DEV_ADMIN_*`, `DEV_ASSISTANT_*`, `DEV_ACCOUNTING_*` y `DEV_ASSISTANT_AGENCY_CODE` documentadas en `.env.example`, usando contrasenas locales de al menos 12 caracteres. Luego ejecuta:
@@ -71,7 +72,7 @@ npm run seed:dev
 
 El seed solo acepta `PlanillaChecksDB` en SQL Server Express local y se bloquea en produccion y en la base de integracion. Dentro de una transaccion crea o actualiza las diez agencias operativas (`001`, `002`, `004` a `011`) y restaura las cuentas locales `ADMIN`, `ASISTENTE` y `CONTABILIDAD`. Es idempotente, no imprime credenciales ni hashes y no elimina agencias adicionales: las conserva y reporta sus codigos para evitar afectar referencias existentes.
 
-`001_create_database.sql` es un bootstrap opcional que crea unicamente `PlanillaChecksDB`. Para otro `DB_DATABASE`, la base debe existir previamente y los scripts `002` a `008` deben ejecutarse con `-d` apuntando explicitamente a ella.
+`001_create_database.sql` es un bootstrap opcional que crea unicamente `PlanillaChecksDB`. Para otro `DB_DATABASE`, la base debe existir previamente y los scripts `002` a `009` deben ejecutarse con `-d` apuntando explicitamente a ella.
 
 ## Crear el primer administrador
 
@@ -107,13 +108,13 @@ npm run preview:ui
 
 La vista queda exclusivamente en `http://127.0.0.1:3100`, usa fixtures ficticios en memoria y se bloquea si `NODE_ENV=production`. No carga SQL Server, Web Services, sesiones ni autenticacion real, y rechaza operaciones de escritura. ASISTENTE puede descargar solamente planillas enviadas de su agencia ficticia; CONTABILIDAD puede descargarlas desde pendientes, detalle e historial. ADMIN no presenta botones ni una ruta de PDF.
 
-Los PDFs se generan en memoria con `src/services/planilla-pdf.service.js`, en carta horizontal, y no se guardan en disco ni en base de datos. La separacion por rol y agencia dentro del preview es demostrativa: no constituye RBAC real. La integracion productiva futura debera obtener la planilla persistida mediante un repositorio autorizado y validar en backend la sesion revalidada, el rol y la agencia antes de invocar el generador.
+Los PDFs se generan en memoria con `src/services/planilla-pdf.service.js`, en carta horizontal, y no se guardan en disco ni en base de datos. La aplicacion productiva expone `GET /asistente/planillas/:id/pdf` y `GET /contabilidad/planillas/:id/pdf`: ambas rutas revalidan la sesion y el rol; la primera obtiene la agencia exclusivamente del usuario autenticado y agrega la linea de firma del jefe de agencia, mientras la segunda permite la consulta multiagencia sin firma. ADMIN no tiene ruta de descarga. El contexto del documento lo fija cada controlador y no se acepta desde el navegador.
 
 `INSTITUTIONAL_PORTAL_URL` es opcional. Cuando contiene una URL absoluta HTTP(S) sin credenciales, Planillas muestra una accion para volver al portal institucional. Si se omite, el modulo funciona localmente sin ese enlace. La variable no implementa SSO ni transmite identidad. Los limites y mapeos preparatorios se documentan en [`docs/institutional-integration.md`](docs/institutional-integration.md).
 
 La verificacion integral requiere la base separada existente `PlanillaChecksTestDB`, indicada por `TEST_DB_DATABASE` y distinta de `DB_DATABASE`. El script exige ese nombre exacto, cambia a esa base antes de cargar la aplicacion y comprueba `DB_NAME()` antes de crear fixtures.
 
-La base de pruebas no se crea ni se elimina automaticamente. Un operador debe crearla explicitamente y aplicar `002` a `008` con `sqlcmd -d` antes de ejecutar:
+La base de pruebas no se crea ni se elimina automaticamente. Un operador debe crearla explicitamente y aplicar `002` a `009` con `sqlcmd -d` antes de ejecutar:
 
 ```powershell
 npm test
@@ -155,4 +156,4 @@ El contrato, campos, calculos conocidos, errores y reglas pendientes del Web Ser
 - El cifrado y los certificados de SQL Server deben definirse segun la infraestructura del despliegue. La configuracion actual corresponde a SQL Server Express local.
 - El rate limiting de login y registro es recomendable antes del despliegue definitivo, pero no forma parte de esta etapa interna.
 - Las mutaciones autenticadas de administracion, acta diaria, envio de planillas, cierre de sesion y decision de traslado exigen un token CSRF ligado a la sesion. El registro publico tambien crea una sesion anonima para ligar su token CSRF. Los formularios HTML lo envian como `_csrf` y las APIs JSON mediante `x-csrf-token`.
-- Los scripts `002` a `008` requieren que el operador o runner seleccione explicitamente la base destino con `sqlcmd -d`.
+- Los scripts `002` a `009` requieren que el operador o runner seleccione explicitamente la base destino con `sqlcmd -d`.

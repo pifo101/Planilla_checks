@@ -391,6 +391,34 @@ async function main() {
   assert.deepEqual(groupedRows.recordset.map((row) => row.miembroId), ['19536', '19537']);
   assert.deepEqual(groupedRows.recordset.map((row) => row.montoCancelado), ['500.00', '0.00']);
 
+  const triggerDefinition = await pool.request().query(`
+    SELECT OBJECT_DEFINITION(OBJECT_ID(N'dbo.TR_solicitudes_bloquear_procesadas')) AS definition;
+  `);
+  assert.match(
+    triggerDefinition.recordset[0].definition || '',
+    /miembro_id\s*=\s*source\.miembro_id/i,
+    'La base de pruebas requiere aplicar manualmente database/009_preserve_group_member_updates.sql.',
+  );
+  const memberUpdateTransaction = new sql.Transaction(pool);
+  await memberUpdateTransaction.begin();
+  try {
+    const updatedMember = await new sql.Request(memberUpdateTransaction)
+      .input('solicitudId', sql.BigInt, groupedPlanilla.solicitudes[0].id)
+      .input('miembroId', sql.NVarChar(100), `MIEMBRO-ACTUALIZADO-${suffix}`)
+      .query(`
+        UPDATE dbo.solicitudes_planilla
+        SET miembro_id = @miembroId
+        WHERE id = @solicitudId;
+
+        SELECT miembro_id AS miembroId
+        FROM dbo.solicitudes_planilla
+        WHERE id = @solicitudId;
+      `);
+    assert.equal(updatedMember.recordset[0].miembroId, `MIEMBRO-ACTUALIZADO-${suffix}`);
+  } finally {
+    await memberUpdateTransaction.rollback();
+  }
+
   const nextDayNow = new Date('2036-02-02T12:00:00.000Z');
   const nextDayDate = getOperationalDate(nextDayNow);
   assert.equal((await actaService.getCurrentActa({ now: () => nextDayNow })).acta, null);
@@ -880,7 +908,19 @@ async function main() {
   assert.match(ownDetailHtml, /Q\s*4,500\.00/);
   assert.match(ownDetailHtml, /Q\s*500\.00/);
   assert.equal((await fetch(`${baseUrl}/asistente/planillas/${alternatePlanilla.id}`, { headers: { cookie } })).status, 404);
+  const assistantPdf = await fetch(`${baseUrl}/asistente/planillas/${groupedPlanilla.id}/pdf?agenciaId=${alternateAgencyId}&context=CONTABILIDAD`, {
+    headers: { cookie },
+  });
+  assert.equal(assistantPdf.status, 200);
+  assert.equal(assistantPdf.headers.get('content-type'), 'application/pdf');
+  assert.match(assistantPdf.headers.get('content-disposition'), /^attachment; filename="planilla-[A-Za-z0-9_-]+\.pdf"$/);
+  assert.match(assistantPdf.headers.get('cache-control'), /no-store/);
+  assert.equal(Buffer.from(await assistantPdf.arrayBuffer()).subarray(0, 5).toString('ascii'), '%PDF-');
+  assert.equal((await fetch(`${baseUrl}/asistente/planillas/${alternatePlanilla.id}/pdf`, { headers: { cookie } })).status, 404);
+  assert.equal((await fetch(`${baseUrl}/asistente/planillas/${groupedPlanilla.id}/pdf`, { redirect: 'manual' })).status, 302);
+  assert.equal((await fetch(`${baseUrl}/asistente/planillas/${groupedPlanilla.id}/pdf`, { headers: { cookie: adminCookie } })).status, 403);
   assert.equal((await fetch(`${baseUrl}/asistente/planillas/0`, { headers: { cookie } })).status, 400);
+  assert.equal((await fetch(`${baseUrl}/asistente/planillas/0/pdf`, { headers: { cookie } })).status, 400);
   assert.equal((await fetch(`${baseUrl}/asistente/planillas?fecha=2026-02-30`, { headers: { cookie } })).status, 400);
   const emptyHistory = await fetch(`${baseUrl}/asistente/planillas?fecha=2000-01-01`, { headers: { cookie } });
   assert.equal(emptyHistory.status, 200);
@@ -1067,7 +1107,14 @@ async function main() {
   });
   assert.equal(accountingAlternateDetail.status, 200);
   assert.match(await accountingAlternateDetail.text(), new RegExp(`Agencia alterna ${suffix}`));
+  const accountingPdf = await fetch(`${baseUrl}/contabilidad/planillas/${alternatePlanilla.id}/pdf?context=ASISTENTE`, {
+    headers: { cookie: accountingCookie },
+  });
+  assert.equal(accountingPdf.status, 200);
+  assert.equal(accountingPdf.headers.get('content-type'), 'application/pdf');
+  assert.equal(Buffer.from(await accountingPdf.arrayBuffer()).subarray(0, 5).toString('ascii'), '%PDF-');
   assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/0`, { headers: { cookie: accountingCookie } })).status, 400);
+  assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/0/pdf`, { headers: { cookie: accountingCookie } })).status, 400);
   assert.equal((await fetch(`${baseUrl}/contabilidad/planillas/999999999999999`, { headers: { cookie: accountingCookie } })).status, 404);
   assert.equal((await fetch(`${baseUrl}/contabilidad/planillas?agencia=0`, { headers: { cookie: accountingCookie } })).status, 400);
   assert.equal((await fetch(`${baseUrl}/contabilidad/planillas?agencia=999999999`, { headers: { cookie: accountingCookie } })).status, 400);

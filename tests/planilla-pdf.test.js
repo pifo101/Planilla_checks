@@ -7,6 +7,7 @@ const preview = require('../scripts/preview-ui');
 const {
   generatePlanillaPdf,
   normalizePlanillaDocument,
+  PDF_CONTEXTS,
 } = require('../src/services/planilla-pdf.service');
 
 async function loadPdf(buffer) {
@@ -22,6 +23,12 @@ async function pdfText(pdf) {
     pages.push(content.items.map((item) => item.str).join(' '));
   }
   return pages;
+}
+
+async function pdfItems(pdf, pageNumber) {
+  const page = await pdf.getPage(pageNumber);
+  const content = await page.getTextContent();
+  return content.items;
 }
 
 function makePlanilla(rowCount) {
@@ -77,23 +84,25 @@ test('normalization derives exact cent totals from included rows', () => {
 test('PDFs for 1, 5, 20, and 50 rows are valid landscape Letter documents', async () => {
   const expectedPages = new Map([[1, 1], [5, 1], [20, 2], [50, 4]]);
   for (const rowCount of expectedPages.keys()) {
-    const buffer = await generatePlanillaPdf(makePlanilla(rowCount));
-    assert.equal(buffer.subarray(0, 5).toString('ascii'), '%PDF-', `${rowCount} rows`);
-    assert.ok(buffer.length > 2000, `${rowCount} rows`);
+    for (const context of Object.values(PDF_CONTEXTS)) {
+      const buffer = await generatePlanillaPdf(makePlanilla(rowCount), { context });
+      assert.equal(buffer.subarray(0, 5).toString('ascii'), '%PDF-', `${context}, ${rowCount} rows`);
+      assert.ok(buffer.length > 2000, `${context}, ${rowCount} rows`);
 
-    const pdf = await loadPdf(buffer);
-    assert.equal(pdf.numPages, expectedPages.get(rowCount), `${rowCount} rows`);
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-      const page = await pdf.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: 1 });
-      assert.equal(viewport.width, 792, `${rowCount} rows, page ${pageNumber}`);
-      assert.equal(viewport.height, 612, `${rowCount} rows, page ${pageNumber}`);
+      const pdf = await loadPdf(buffer);
+      assert.equal(pdf.numPages, expectedPages.get(rowCount), `${context}, ${rowCount} rows`);
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 1 });
+        assert.equal(viewport.width, 792, `${context}, ${rowCount} rows, page ${pageNumber}`);
+        assert.equal(viewport.height, 612, `${context}, ${rowCount} rows, page ${pageNumber}`);
+      }
     }
   }
 });
 
 test('multi-page PDF repeats headers, keeps one final total, and exposes page numbers', async () => {
-  const pdf = await loadPdf(await generatePlanillaPdf(makePlanilla(50)));
+  const pdf = await loadPdf(await generatePlanillaPdf(makePlanilla(50), { context: PDF_CONTEXTS.ACCOUNTING }));
   const pages = await pdfText(pdf);
   pages.forEach((content, index) => {
     assert.match(content, /PLANILLA DE CHEQUES/, `page ${index + 1}`);
@@ -119,11 +128,89 @@ test('PDF preserves accented and long values and tolerates incomplete optional d
   assert.equal(normalized.rows[0].metodologia, '-');
   assert.equal(normalized.rows[0].fechaHora, '-');
 
-  const pdf = await loadPdf(await generatePlanillaPdf(source));
+  const pdf = await loadPdf(await generatePlanillaPdf(source, { context: PDF_CONTEXTS.ACCOUNTING }));
   const content = (await pdfText(pdf)).join(' ');
   assert.match(content, /Maria Jose Chacon Alvarez de la Pena/);
   assert.match(content, /PLANILLA DE CHEQUES/);
   assert.match(content, /Q 1,234\.56/);
+});
+
+test('PDF grupal conserva cada integrante y sus importes', async () => {
+  const source = makePlanilla(2);
+  source.solicitudes = [
+    { ...source.solicitudes[0], numeroSolicitud: '90001', miembroId: 'M-01', nombreCliente: 'Integrante Uno', metodologia: 'GRUPAL' },
+    { ...source.solicitudes[1], numeroSolicitud: '90001', miembroId: 'M-02', nombreCliente: 'Integrante Dos', metodologia: 'GRUPAL' },
+  ];
+  const normalized = normalizePlanillaDocument(source);
+  assert.equal(normalized.rows.length, 2);
+  assert.equal(normalized.totals.chequeCents, 200000);
+
+  const pdf = await loadPdf(await generatePlanillaPdf(source, { context: PDF_CONTEXTS.ASSISTANT }));
+  const content = (await pdfText(pdf)).join(' ');
+  assert.match(content, /Integrante Uno/);
+  assert.match(content, /Integrante Dos/);
+  assert.match(content, /GRUPAL/);
+});
+
+test('firma del jefe queda centrada abajo solo en ASISTENTE y pagina cuando es necesario', async () => {
+  const source = makePlanilla(26);
+  const assistantPdf = await loadPdf(await generatePlanillaPdf(source, { context: PDF_CONTEXTS.ASSISTANT }));
+  const accountingPdf = await loadPdf(await generatePlanillaPdf(source, { context: PDF_CONTEXTS.ACCOUNTING }));
+  const assistantPages = await pdfText(assistantPdf);
+  const accountingPages = await pdfText(accountingPdf);
+
+  assert.equal(assistantPdf.numPages, accountingPdf.numPages + 1);
+  assert.equal(assistantPages.filter((content) => content.includes('Jefe de Agencia')).length, 1);
+  assert.match(assistantPages.at(-1), /TOTALES DE LA PLANILLA/);
+  assert.match(assistantPages.at(-1), /Jefe de Agencia/);
+  assert.doesNotMatch(accountingPages.join(' '), /Jefe de Agencia/);
+
+  const signature = (await pdfItems(assistantPdf, assistantPdf.numPages))
+    .find((item) => item.str === 'Jefe de Agencia');
+  assert.ok(signature);
+  assert.ok(Math.abs((signature.transform[4] + (signature.width / 2)) - 396) < 1);
+  assert.ok(signature.transform[5] < 110, 'la firma debe permanecer en la zona inferior');
+});
+
+test('trazabilidad de traslado usa la decision historica en ambos contextos', async () => {
+  const transferred = preview.demoData.allPlanillas.find((item) => item.codigo === 'PLA-DEMO-GRUPAL-005');
+  const notTransferred = {
+    ...makePlanilla(1),
+    trasladado: false,
+    fechaDecisionTraslado: new Date('2026-10-09T15:25:00-06:00'),
+    decisionTrasladoUsuario: 'Contabilidad Demo',
+  };
+  const pending = {
+    ...makePlanilla(1),
+    trasladado: null,
+    fechaDecisionTraslado: null,
+    decisionTrasladoUsuario: null,
+  };
+
+  for (const context of Object.values(PDF_CONTEXTS)) {
+    const transferredText = (await pdfText(await loadPdf(
+      await generatePlanillaPdf(transferred, { context }),
+    ))).join(' ');
+    assert.match(transferredText, /Trasladado por: Contabilidad Demo \| Fecha: 09\/10\/2026, 3:05 p\. m\./);
+    assert.doesNotMatch(transferredText, /Decision:|Usuario:/);
+
+    const notTransferredText = (await pdfText(await loadPdf(
+      await generatePlanillaPdf(notTransferred, { context }),
+    ))).join(' ');
+    assert.match(notTransferredText, /Marcada como no trasladada por: Contabilidad Demo \| Fecha: 09\/10\/2026, 3:25 p\. m\./);
+
+    const pendingText = (await pdfText(await loadPdf(
+      await generatePlanillaPdf(pending, { context }),
+    ))).join(' ');
+    assert.match(pendingText, /Pendiente/);
+    assert.doesNotMatch(pendingText, /Trasladado por:|Marcada como no trasladada por:|Decision:|Usuario:/);
+  }
+});
+
+test('generacion PDF rechaza contextos ausentes o manipulados', async () => {
+  await assert.rejects(generatePlanillaPdf(makePlanilla(1)), TypeError);
+  await assert.rejects(generatePlanillaPdf(makePlanilla(1), { context: 'ADMIN' }), TypeError);
+  await assert.rejects(generatePlanillaPdf(makePlanilla(1), { context: 'ASISTENTE&firma=false' }), TypeError);
 });
 
 test('preview PDF routes enforce context, agency, official status, and safe headers', async () => {

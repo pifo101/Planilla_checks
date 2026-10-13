@@ -19,6 +19,11 @@ const PAGE = {
   bottomContent: 564,
 };
 
+const PDF_CONTEXTS = Object.freeze({
+  ASSISTANT: 'ASISTENTE',
+  ACCOUNTING: 'CONTABILIDAD',
+});
+
 const TABLE_COLUMNS = [
   { key: 'numeroSolicitud', label: 'Solicitud', width: 60 },
   { key: 'nombreCliente', label: 'Cliente', width: 126 },
@@ -34,6 +39,15 @@ const TABLE_COLUMNS = [
 const dateTimeFormatter = new Intl.DateTimeFormat('es-GT', {
   dateStyle: 'medium',
   timeStyle: 'short',
+  timeZone: 'America/Guatemala',
+});
+
+const decisionDateTimeFormatter = new Intl.DateTimeFormat('es-GT', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
   timeZone: 'America/Guatemala',
 });
 
@@ -64,10 +78,23 @@ function formatDateTime(value) {
   return Number.isNaN(date.getTime()) ? '-' : dateTimeFormatter.format(date);
 }
 
+function formatDecisionDateTime(value) {
+  if (!value) return '-';
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? '-' : decisionDateTimeFormatter.format(date);
+}
+
 function transferStatus(value) {
   if (value === true) return 'Trasladada';
   if (value === false) return 'No trasladada';
   return 'Pendiente';
+}
+
+function requirePdfContext(context) {
+  if (!Object.values(PDF_CONTEXTS).includes(context)) {
+    throw new TypeError('Se requiere un contexto valido para generar el PDF.');
+  }
+  return context;
 }
 
 function normalizePlanillaDocument(planilla) {
@@ -94,8 +121,9 @@ function normalizePlanillaDocument(planilla) {
     agencia: text(planilla.agenciaNombre, 'Sin agencia'),
     numeroActa: text(planilla.numeroActa, 'Sin asignar'),
     fechaEnvio: formatDateTime(planilla.fechaEnvio),
+    trasladado: planilla.trasladado === true ? true : planilla.trasladado === false ? false : null,
     estadoTraslado: transferStatus(planilla.trasladado),
-    fechaDecision: formatDateTime(planilla.fechaDecisionTraslado),
+    fechaDecision: formatDecisionDateTime(planilla.fechaDecisionTraslado),
     usuarioDecision: text(planilla.decisionTrasladoUsuario),
     rows,
     totals: {
@@ -134,8 +162,9 @@ function drawDocumentHeader(doc, data) {
     doc.fillColor(COLORS.text).font('Helvetica').fontSize(9).text(value, x, y + 11, { width: 226, height: 13, ellipsis: true });
   });
 
-  if (data.estadoTraslado !== 'Pendiente') {
-    const decision = `Decision: ${data.fechaDecision} | Usuario: ${data.usuarioDecision}`;
+  if (data.trasladado !== null) {
+    const action = data.trasladado ? 'Trasladado por' : 'Marcada como no trasladada por';
+    const decision = `${action}: ${data.usuarioDecision} | Fecha: ${data.fechaDecision}`;
     doc.fillColor(COLORS.muted).font('Helvetica').fontSize(7).text(decision, PAGE.left, 137, { width: 732, align: 'right', height: 10, ellipsis: true });
   }
 }
@@ -204,6 +233,18 @@ function drawTotals(doc, data, y) {
   });
 }
 
+function drawAgencyManagerSignature(doc, y) {
+  const width = 190;
+  const contentWidth = PAGE.width - PAGE.left - PAGE.right;
+  const x = PAGE.left + ((contentWidth - width) / 2);
+  doc.save().strokeColor(COLORS.text).lineWidth(0.8).moveTo(x, y).lineTo(x + width, y).stroke().restore();
+  doc.fillColor(COLORS.text).font('Helvetica').fontSize(9).text('Jefe de Agencia', x, y + 8, {
+    width,
+    align: 'center',
+    lineBreak: false,
+  });
+}
+
 function addFooters(doc, data) {
   const range = doc.bufferedPageRange();
   for (let pageIndex = range.start; pageIndex < range.start + range.count; pageIndex += 1) {
@@ -215,7 +256,8 @@ function addFooters(doc, data) {
   }
 }
 
-function renderPlanillaPdf(data) {
+function renderPlanillaPdf(data, context) {
+  requirePdfContext(context);
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: 'LETTER',
@@ -246,7 +288,8 @@ function renderPlanillaPdf(data) {
       y = drawTableRow(doc, row, y, index);
     });
 
-    if (y + 70 > PAGE.bottomContent) {
+    const finalSectionHeight = context === PDF_CONTEXTS.ASSISTANT ? 130 : 70;
+    if (y + finalSectionHeight > PAGE.bottomContent) {
       doc.addPage();
       drawContinuationHeader(doc, data);
       y = 76;
@@ -254,16 +297,18 @@ function renderPlanillaPdf(data) {
       y += 16;
     }
     drawTotals(doc, data, y);
+    if (context === PDF_CONTEXTS.ASSISTANT) drawAgencyManagerSignature(doc, Math.max(y + 75, 500));
     addFooters(doc, data);
     doc.end();
   });
 }
 
-async function generatePlanillaPdf(planilla) {
-  return renderPlanillaPdf(normalizePlanillaDocument(planilla));
+async function generatePlanillaPdf(planilla, { context } = {}) {
+  return renderPlanillaPdf(normalizePlanillaDocument(planilla), requirePdfContext(context));
 }
 
 module.exports = {
+  PDF_CONTEXTS,
   formatMoney,
   generatePlanillaPdf,
   normalizePlanillaDocument,

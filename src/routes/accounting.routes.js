@@ -5,6 +5,7 @@ const {
   listTransferHistory,
   showReceivedPlanilla,
 } = require('../controllers/accounting.controller');
+const { downloadAccountingPlanilla } = require('../controllers/planilla-pdf.controller');
 const { requireAuth } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/role.middleware');
 const { requireCsrf } = require('../middleware/csrf.middleware');
@@ -15,6 +16,7 @@ router.use(requireAuth, requireRole('CONTABILIDAD'));
 router.get('/planillas', listReceivedPlanillas);
 router.get('/historial', listTransferHistory);
 router.post('/planillas/:id/traslado', requireCsrf, decideTransfer);
+router.get('/planillas/:id/pdf', downloadAccountingPlanilla);
 router.get('/planillas/:id', showReceivedPlanilla);
 
 module.exports = router;

@@ -198,6 +198,7 @@ BEGIN
         UPDATE target
         SET planilla_id = source.planilla_id,
             numero_solicitud = source.numero_solicitud,
+            miembro_id = source.miembro_id,
             nombre_cliente = source.nombre_cliente,
             monto_aprobado = source.monto_aprobado,
             monto_cancelado = source.monto_cancelado,

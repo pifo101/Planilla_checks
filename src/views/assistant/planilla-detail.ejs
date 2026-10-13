@@ -4,7 +4,7 @@
   <%- include('../partials/sidebar') %>
   <main class="app-main">
     <a class="btn btn-sm btn-outline-secondary mb-3" href="<%= returnTo %>"><i class="bi bi-arrow-left me-1"></i>Volver a planillas</a>
-    <div class="d-flex flex-wrap align-items-center gap-2 mb-4"><div class="me-auto"><div class="page-eyebrow">Asistente de agencia</div><h1 class="h3 mb-1">Planilla <%= planilla.codigo %></h1><p class="text-muted mb-0">Detalle de solo lectura.</p></div><span class="status-badge status-<%= planilla.estado.toLowerCase() %>"><%= planilla.estado %></span><% if (typeof previewMode !== 'undefined' && previewMode && currentUser && currentUser.rol === 'ASISTENTE') { %><a class="btn btn-primary" href="/asistente/planillas/<%= planilla.id %>/pdf"><i class="bi bi-file-earmark-pdf me-2"></i>Descargar PDF</a><% } %></div>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-4"><div class="me-auto"><div class="page-eyebrow">Asistente de agencia</div><h1 class="h3 mb-1">Planilla <%= planilla.codigo %></h1><p class="text-muted mb-0">Detalle de solo lectura.</p></div><span class="status-badge status-<%= planilla.estado.toLowerCase() %>"><%= planilla.estado %></span><a class="btn btn-primary" href="/asistente/planillas/<%= planilla.id %>/pdf"><i class="bi bi-file-earmark-pdf me-2"></i>Descargar PDF</a></div>
 
     <section class="card mb-4" aria-labelledby="planilla-information-title"><div class="card-body p-4"><h2 class="h5 mb-3" id="planilla-information-title">Informacion de la planilla</h2><div class="row g-4">
       <div class="col-6 col-lg"><div class="detail-label">Agencia</div><div class="fw-semibold"><%= planilla.agenciaNombre %></div></div>

@@ -88,11 +88,13 @@ El selector de agencias de Contabilidad procede de `dbo.agencias`: incluye agenc
 
 `database/008_request_planilla_integrity.sql` crea `solicitudes_asignadas`, migra una reserva por cada solicitud historica y agrega la FK compuesta desde sus miembros. Antes de migrar detecta si un numero existente pertenece a varias planillas y aborta sin elegir ni modificar datos. La tabla y la FK forman parte del baseline para instalaciones nuevas.
 
+`database/009_preserve_group_member_updates.sql` actualiza de forma idempotente `TR_solicitudes_bloquear_procesadas` para copiar tambien `miembro_id` desde `inserted`. Al ser un trigger `INSTEAD OF UPDATE`, omitir esa columna descartaba silenciosamente una actualizacion valida de identidad aunque las demas columnas si se persistieran. La migracion no modifica filas existentes.
+
 Las reglas confirmadas de asociacion no requieren cambios de esquema: los montos resultantes ya se almacenan por fila de emision y el constraint compuesto sigue evitando duplicar la misma emision tecnica dentro de una solicitud.
 
 El borrador del navegador no es persistencia. El historial del asistente no cambia. Los GET de Contabilidad son de solo lectura; la unica mutacion es la decision explicita de traslado. La correccion posterior de una decision equivocada esta pendiente de definicion funcional.
 
-`DB_DATABASE` es obligatorio. `001_create_database.sql` es un bootstrap opcional y crea unicamente la base inicial predeterminada `PlanillaChecksDB`; una base con otro nombre debe existir previamente. Los scripts `002` a `008` no contienen `USE`: deben ejecutarse con `sqlcmd -d "NombreBase"` y operan exclusivamente sobre esa conexion seleccionada. La verificacion integral compara `DB_NAME()` con `DB_DATABASE` antes de crear datos temporales.
+`DB_DATABASE` es obligatorio. `001_create_database.sql` es un bootstrap opcional y crea unicamente la base inicial predeterminada `PlanillaChecksDB`; una base con otro nombre debe existir previamente. Los scripts `002` a `009` no contienen `USE`: deben ejecutarse con `sqlcmd -d "NombreBase"` y operan exclusivamente sobre esa conexion seleccionada. La verificacion integral compara `DB_NAME()` con `DB_DATABASE` antes de crear datos temporales y exige que `009` ya este aplicada antes de probar actualizaciones de miembros.
 
 Las pruebas de integracion exigen `TEST_DB_DATABASE=PlanillaChecksTestDB`, distinta de `DB_DATABASE` y existente previamente. La suite no crea ni elimina bases. La configuracion TLS definitiva de SQL Server depende de la infraestructura de despliegue; el entorno actual usa SQL Server Express local.
 
