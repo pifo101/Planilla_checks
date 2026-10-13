@@ -15,15 +15,15 @@
     </section>
     <section class="card">
       <div class="table-responsive">
-        <table class="table table-hover mb-0">
+        <table class="table table-hover table-extra-wide mb-0">
           <caption class="visually-hidden">Planillas enviadas el <%= selectedDate %></caption>
-          <thead><tr><th>Codigo</th><th>Numero de acta</th><th>Fecha de envio</th><th>Agencia</th><th>Registros</th><th>Total aprobado</th><th>Total cancelado</th><th>Descuentos</th><th>Monto cheque</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
+          <thead><tr><th scope="col">Codigo</th><th scope="col">Numero de acta</th><th scope="col">Fecha de envio</th><th scope="col">Agencia</th><th scope="col" class="cell-number">Registros</th><th scope="col" class="cell-money">Total aprobado</th><th scope="col" class="cell-money">Total cancelado</th><th scope="col" class="cell-money">Descuentos</th><th scope="col" class="cell-money">Monto cheque</th><th scope="col">Estado</th><th scope="col" class="table-actions">Acciones</th></tr></thead>
           <tbody>
             <% if (planillas.length === 0) { %>
               <tr><td class="text-center text-muted py-5" colspan="11">No hay planillas enviadas en la fecha seleccionada.</td></tr>
             <% } %>
             <% planillas.forEach((planilla) => { %>
-              <tr><td class="fw-semibold"><%= planilla.codigo %></td><td><%= planilla.numeroActa || 'Sin asignar' %></td><td class="text-nowrap"><%= dateTime.format(planilla.fechaEnvio) %></td><td><%= planilla.agenciaNombre %></td><td><%= planilla.cantidadRegistros %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalAprobado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalCancelado) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalDescuentos) %></td><td class="text-nowrap"><%= sqlCurrency.format(planilla.totalMontoCheque) %></td><td><span class="status-badge status-<%= planilla.estado.toLowerCase() %>"><%= planilla.estado %></span></td><td class="text-end"><a class="btn btn-sm btn-outline-primary text-nowrap" href="/asistente/planillas/<%= planilla.id %>?returnTo=<%= encodeURIComponent(returnTo) %>"><i class="bi bi-eye me-1"></i>Ver detalle</a></td></tr>
+              <tr><td class="fw-semibold cell-code"><%= planilla.codigo %></td><td class="cell-acta"><%= planilla.numeroActa || 'Sin asignar' %></td><td class="cell-date"><%= dateTime.format(planilla.fechaEnvio) %></td><td><%= planilla.agenciaNombre %></td><td class="cell-number"><%= planilla.cantidadRegistros %></td><td class="cell-money"><%= sqlCurrency.format(planilla.totalAprobado) %></td><td class="cell-money"><%= sqlCurrency.format(planilla.totalCancelado) %></td><td class="cell-money"><%= sqlCurrency.format(planilla.totalDescuentos) %></td><td class="cell-money"><%= sqlCurrency.format(planilla.totalMontoCheque) %></td><td><span class="status-badge status-<%= planilla.estado.toLowerCase() %>"><%= planilla.estado %></span></td><td class="table-actions"><div class="d-flex flex-wrap gap-2"><a class="btn btn-sm btn-outline-primary" href="/asistente/planillas/<%= planilla.id %>?returnTo=<%= encodeURIComponent(returnTo) %>"><i class="bi bi-eye me-1"></i>Ver detalle</a><% if (typeof previewMode !== 'undefined' && previewMode && currentUser && currentUser.rol === 'ASISTENTE') { %><a class="btn btn-sm btn-primary" href="/asistente/planillas/<%= planilla.id %>/pdf" aria-label="Descargar PDF de la planilla <%= planilla.codigo %>"><i class="bi bi-file-earmark-pdf me-1"></i>Descargar PDF</a><% } %></div></td></tr>
             <% }) %>
           </tbody>
         </table>

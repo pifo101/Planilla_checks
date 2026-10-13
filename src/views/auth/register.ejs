@@ -5,6 +5,7 @@
       <div class="d-flex align-items-center gap-3 mb-4">
         <span class="brand-mark"><i class="bi bi-person-plus"></i></span>
         <div>
+          <div class="auth-kicker">Procesos Internos ADICLA</div>
           <h1 class="h4 mb-0">Crear cuenta</h1>
           <span class="text-muted small">Acceso institucional como asistente</span>
         </div>
@@ -58,6 +59,9 @@
       <div class="text-center mt-3">
         <a href="/login"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Volver a iniciar sesion</a>
       </div>
+      <% if (institutionalPortalUrl) { %>
+        <div class="text-center mt-2"><a class="small" href="<%= institutionalPortalUrl %>" rel="noopener noreferrer">Volver al portal institucional</a></div>
+      <% } %>
     </div>
   </section>
 </main>

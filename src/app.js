@@ -48,6 +48,7 @@ app.use((req, res, next) => {
   res.locals.currentPath = req.path;
   res.locals.currentUser = req.session.user || null;
   res.locals.homePath = homeForRole(req.session.user?.rol);
+  res.locals.institutionalPortalUrl = config.institutionalPortalUrl;
   res.locals.currency = new Intl.NumberFormat('es-GT', {
     style: 'currency',
     currency: 'GTQ',

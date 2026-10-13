@@ -5,8 +5,9 @@
       <div class="d-flex align-items-center gap-3 mb-4">
         <span class="brand-mark"><i class="bi bi-check2-square"></i></span>
         <div>
-          <h1 class="h4 mb-0">Planilla Checks</h1>
-          <span class="text-muted small">Acceso al sistema</span>
+          <div class="auth-kicker">Procesos Internos ADICLA</div>
+          <h1 class="h4 mb-0">Planillas de Cheques</h1>
+          <span class="text-muted small">Acceso seguro al modulo</span>
         </div>
       </div>
 
@@ -32,6 +33,9 @@
         <span class="text-muted small d-block mb-2">¿Aun no tienes acceso?</span>
         <a class="btn btn-outline-primary w-100" href="/crear-cuenta">Crear cuenta</a>
       </div>
+      <% if (institutionalPortalUrl) { %>
+        <div class="text-center mt-3"><a class="small" href="<%= institutionalPortalUrl %>" rel="noopener noreferrer"><i class="bi bi-arrow-left me-1"></i>Volver al portal institucional</a></div>
+      <% } %>
     </div>
   </section>
 </main>

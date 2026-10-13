@@ -39,6 +39,7 @@ DB_TRUST_SERVER_CERTIFICATE=true
 DB_POOL_MAX=10
 WEBSERVICE_BASE_URL=http://adicla-app.iso.com.gt:7001/ServicioSolicitudesREST/ServicioSolicitudes.svc
 WEBSERVICE_TIMEOUT_MS=8000
+INSTITUTIONAL_PORTAL_URL=
 ```
 
 No se necesitan `DB_USER` ni `DB_PASSWORD`: la conexion utiliza la identidad de Windows del proceso.
@@ -95,6 +96,20 @@ npm start
 ```
 
 La aplicacion queda en `http://localhost:3000`. Para recarga automatica usar `npm run dev`.
+
+### Vista previa local y PDFs
+
+Cuando la aplicacion real no pueda cargar el controlador nativo de SQL Server, la demostracion aislada puede iniciarse con:
+
+```powershell
+npm run preview:ui
+```
+
+La vista queda exclusivamente en `http://127.0.0.1:3100`, usa fixtures ficticios en memoria y se bloquea si `NODE_ENV=production`. No carga SQL Server, Web Services, sesiones ni autenticacion real, y rechaza operaciones de escritura. ASISTENTE puede descargar solamente planillas enviadas de su agencia ficticia; CONTABILIDAD puede descargarlas desde pendientes, detalle e historial. ADMIN no presenta botones ni una ruta de PDF.
+
+Los PDFs se generan en memoria con `src/services/planilla-pdf.service.js`, en carta horizontal, y no se guardan en disco ni en base de datos. La separacion por rol y agencia dentro del preview es demostrativa: no constituye RBAC real. La integracion productiva futura debera obtener la planilla persistida mediante un repositorio autorizado y validar en backend la sesion revalidada, el rol y la agencia antes de invocar el generador.
+
+`INSTITUTIONAL_PORTAL_URL` es opcional. Cuando contiene una URL absoluta HTTP(S) sin credenciales, Planillas muestra una accion para volver al portal institucional. Si se omite, el modulo funciona localmente sin ese enlace. La variable no implementa SSO ni transmite identidad. Los limites y mapeos preparatorios se documentan en [`docs/institutional-integration.md`](docs/institutional-integration.md).
 
 La verificacion integral requiere la base separada existente `PlanillaChecksTestDB`, indicada por `TEST_DB_DATABASE` y distinta de `DB_DATABASE`. El script exige ese nombre exacto, cambia a esa base antes de cargar la aplicacion y comprueba `DB_NAME()` antes de crear fixtures.
 

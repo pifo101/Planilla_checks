@@ -2,11 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 
-function loadProductionConfig(sessionSecret) {
+function loadProductionConfig(sessionSecret, institutionalPortalUrl) {
   const env = { ...process.env, NODE_ENV: 'production' };
   if (sessionSecret === undefined) delete env.SESSION_SECRET;
   else env.SESSION_SECRET = sessionSecret;
-  return spawnSync(process.execPath, ['-e', "require('./src/config')"], {
+  if (institutionalPortalUrl === undefined) delete env.INSTITUTIONAL_PORTAL_URL;
+  else env.INSTITUTIONAL_PORTAL_URL = institutionalPortalUrl;
+  return spawnSync(process.execPath, ['-e', "process.stdout.write(JSON.stringify(require('./src/config').institutionalPortalUrl))"], {
     cwd: process.cwd(),
     env,
     encoding: 'utf8',
@@ -38,3 +40,24 @@ test('rechaza SESSION_SECRET vacio en produccion', () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /SESSION_SECRET debe configurarse/);
 });
+
+test('permite omitir INSTITUTIONAL_PORTAL_URL', () => {
+  const result = loadProductionConfig('production-secret-for-config-test');
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, 'null');
+});
+
+test('normaliza una INSTITUTIONAL_PORTAL_URL HTTPS absoluta', () => {
+  const result = loadProductionConfig('production-secret-for-config-test', 'https://portal.adicla.org.gt/ProcesosInternos');
+  assert.equal(result.status, 0);
+  assert.equal(JSON.parse(result.stdout), 'https://portal.adicla.org.gt/ProcesosInternos');
+});
+
+for (const invalidUrl of ['javascript:alert(1)', '/ruta-relativa', 'https://usuario:clave@portal.adicla.org.gt/']) {
+  test(`rechaza INSTITUTIONAL_PORTAL_URL insegura: ${invalidUrl}`, () => {
+    const result = loadProductionConfig('production-secret-for-config-test', invalidUrl);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /INSTITUTIONAL_PORTAL_URL debe ser una URL absoluta HTTP\(S\)/);
+    assert.doesNotMatch(result.stderr, /usuario:clave/);
+  });
+}

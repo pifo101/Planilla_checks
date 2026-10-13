@@ -13,6 +13,7 @@ function render(view, locals) {
     currentUser: null,
     homePath: '/login',
     csrfToken: '',
+    institutionalPortalUrl: null,
     ...locals,
   });
 }
@@ -46,6 +47,55 @@ test('navbar usa el mismo home seguro para sesiones anonimas', async () => {
   const html = await render('partials/navbar.ejs', {});
   assert.match(html, /class="navbar-brand[^>]+href="\/login"/);
   assert.doesNotMatch(html, /class="navbar-brand[^>]+href="\/dashboard"/);
+});
+
+test('navegacion institucional es opcional y usa la URL validada del servidor', async () => {
+  const withoutPortal = await render('partials/navbar.ejs', {});
+  assert.doesNotMatch(withoutPortal, /Portal institucional/);
+
+  const withPortal = await render('partials/navbar.ejs', {
+    institutionalPortalUrl: 'https://portal.adicla.org.gt/ProcesosInternos',
+  });
+  assert.match(withPortal, /href="https:\/\/portal\.adicla\.org\.gt\/ProcesosInternos"/);
+  assert.match(withPortal, /rel="noopener noreferrer"/);
+});
+
+test('login y registro muestran retorno institucional solo cuando esta configurado', async () => {
+  const loginWithoutPortal = await render('auth/login.ejs', { pageTitle: 'Login' });
+  assert.doesNotMatch(loginWithoutPortal, /Volver al portal institucional/);
+
+  const loginWithPortal = await render('auth/login.ejs', {
+    pageTitle: 'Login',
+    institutionalPortalUrl: 'https://portal.adicla.org.gt/',
+  });
+  assert.match(loginWithPortal, /Planillas de Cheques/);
+  assert.match(loginWithPortal, /Volver al portal institucional/);
+
+  const registerWithPortal = await render('auth/register.ejs', {
+    pageTitle: 'Crear cuenta',
+    institutionalPortalUrl: 'https://portal.adicla.org.gt/',
+    agencies: [],
+    values: {},
+  });
+  assert.match(registerWithPortal, /Volver al portal institucional/);
+  assert.doesNotMatch(registerWithPortal, /name="rol"/);
+});
+
+test('sidebar conserva navegacion independiente para cada rol', async () => {
+  const cases = [
+    ['ADMIN', '/dashboard', /Dashboard[\s\S]*Usuarios[\s\S]*Agencias/],
+    ['ASISTENTE', '/asistente/nueva-planilla', /Nueva planilla[\s\S]*Planillas enviadas/],
+    ['CONTABILIDAD', '/contabilidad/planillas', /Pendientes de traslado[\s\S]*Historial de traslados/],
+  ];
+
+  for (const [rol, currentPath, expectedNavigation] of cases) {
+    const html = await render('partials/sidebar.ejs', {
+      currentPath,
+      currentUser: { rol, nombre: `Usuario ${rol}`, agenciaNombre: rol === 'ASISTENTE' ? 'Agencia Solola' : null },
+    });
+    assert.match(html, expectedNavigation);
+    assert.match(html, /MODULOS DISPONIBLES/);
+  }
 });
 
 test('errores usan el codigo recibido y el home correspondiente al rol', async () => {

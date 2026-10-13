@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
+    "preview:ui": "node scripts/preview-ui.js",
     "seed:dev": "node scripts/seed-development.js",
     "create-admin": "node scripts/create-admin.js",
     "test": "npm run test:webservice && npm run test:integration",
@@ -22,9 +23,14 @@
     "express": "^5.1.0",
     "express-session": "^1.18.2",
     "msnodesqlv8": "^5.5.0",
-    "mssql": "^12.7.2"
+    "mssql": "^12.7.2",
+    "pdfkit": "^0.20.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "@fontsource/inter": "^5.2.8",
+    "bootstrap": "^5.3.8",
+    "bootstrap-icons": "^1.13.1",
+    "nodemon": "^3.1.10",
+    "pdfjs-dist": "^6.4.299"
   }
 }

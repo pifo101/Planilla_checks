@@ -3,11 +3,34 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Administracion de planillas de creditos y cheques">
-  <title><%= pageTitle %> | Planilla Checks</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+  <meta name="description" content="Administracion institucional de planillas de creditos y cheques">
+  <meta name="theme-color" content="#002855">
+  <title><%= pageTitle %> | Planillas de Cheques</title>
+  <% if (typeof previewMode !== 'undefined' && previewMode) { %>
+    <link href="/preview-assets/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/preview-assets/bootstrap-icons/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/preview-ui.css">
+  <% } else { %>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+  <% } %>
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
+  <% if (typeof previewMode !== 'undefined' && previewMode) { %>
+    <aside class="preview-banner" aria-label="Modo de demostracion">
+      <strong><i class="bi bi-eye" aria-hidden="true"></i> Vista previa local —</strong>
+      <span>Datos ficticios. Sin autenticación ni persistencia.</span>
+      <nav aria-label="Vistas de demostracion">
+        <a href="/login">Login</a>
+        <a href="/crear-cuenta">Registro</a>
+        <a href="/dashboard">ADMIN</a>
+        <a href="/asistente/nueva-planilla">ASISTENTE</a>
+        <a href="/contabilidad/planillas">CONTABILIDAD</a>
+      </nav>
+    </aside>
+  <% } %>
   <div class="app-shell">
